@@ -1,4 +1,4 @@
-﻿package me.hanime.atv.data
+package me.hanime.atv.data
 
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -77,9 +77,6 @@ object HtmlParser {
                 ?.absUrl("href")?.let { watchCode.find(it)?.groupValues?.get(1) }
             ?: return null
         val parts = metaText.split("•").map { it.trim() }.filter { it.isNotEmpty() }
-        val tags = wrap.select("span").mapNotNull { span ->
-            span.text().trim().takeIf { it.isNotEmpty() && !it.contains("查看") }
-        }
         return HanimeCard(
             code = code,
             title = h1.ifBlank { "精选推荐" },
@@ -87,21 +84,37 @@ object HtmlParser {
             views = parts.getOrNull(1),
             uploader = parts.getOrNull(0),
             timeAgo = parts.getOrNull(2),
-            duration = tags.take(3).joinToString(" · ").ifBlank { null },
+            duration = null,
         )
     }
 
     fun parseUser(body: Element): UserInfo? {
-        val trigger = body.getElementById("user-modal-trigger") ?: return null
-        val href = trigger.absUrl("href").ifBlank { trigger.attr("href") }
-        val id = userLink.find(href)?.groupValues?.get(1) ?: return null
-        val avatar = trigger.selectFirst("img")?.absUrl("src")
-        val name = body.getElementById("user-modal-dp-wrapper")
-            ?.selectFirst("div[class*=name], h4, h5")
-            ?.text()?.trim()
+        val trigger = body.getElementById("user-modal-trigger")
+        val triggerHref = trigger?.absUrl("href").orEmpty().ifBlank { trigger?.attr("href").orEmpty() }
+
+        val profileLink = body.selectFirst("#user-modal-dp-wrapper a[href*=/user/]")
+            ?: body.select("a[href*=/user/]").firstOrNull { a ->
+                val href = a.absUrl("href").ifBlank { a.attr("href") }
+                href.contains("/user/") && a.selectFirst("img") != null
+            }
+        val profileHref = profileLink?.absUrl("href").orEmpty()
+            .ifBlank { profileLink?.attr("href").orEmpty() }
+
+        val id = userLink.find(triggerHref)?.groupValues?.get(1)
+            ?: userLink.find(profileHref)?.groupValues?.get(1)
+
+        // 未登录时账号入口指向 /login，且页面上找不到用户主页/退出入口
+        val hasLogout = body.selectFirst("a[href*=/logout]") != null
+        if (id == null && !hasLogout) return null
+
+        val modal = body.getElementById("user-modal-dp-wrapper")
+        val avatar = trigger?.selectFirst("img")?.absUrl("src")
+            ?: modal?.selectFirst("img")?.absUrl("src")
+        val name = modal?.selectFirst("div[class*=name], h4, h5, .user-name")?.text()?.trim()
             ?.ifBlank { null }
-            ?: avatar?.let { "已登录" }
-        return UserInfo(id = id, name = name.orEmpty().ifBlank { "已登录" }, avatar = avatar)
+            ?: profileLink?.text()?.trim()?.ifBlank { null }
+            ?: "已登录"
+        return UserInfo(id = id ?: "0", name = name, avatar = avatar)
     }
 
     // ---------------------------------------------------------------- 列表
@@ -234,4 +247,5 @@ object HtmlParser {
         )
     }
 }
+
 

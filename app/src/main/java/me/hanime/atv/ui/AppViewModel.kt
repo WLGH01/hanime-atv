@@ -333,6 +333,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+
+    /** 收藏（点赞）当前视频 */
+    fun toggleFavorite(video: VideoDetail) {
+        if (!isLoggedIn) {
+            openLogin()
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                repository.like(video.code, video.csrf, user?.id, positive = true)
+            }
+                .onSuccess { showToast("已收藏") }
+                .onFailure { showToast(it.toUserMessage()) }
+        }
+    }
+
+    /** 加入稍后再看 */
+    fun addToWatchLater(video: VideoDetail) {
+        if (!isLoggedIn) {
+            openLogin()
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                repository.saveToWatchLater(video.code, video.csrf, user?.id, checked = true)
+            }
+                .onSuccess { showToast("已加入稍后再看") }
+                .onFailure { showToast(it.toUserMessage()) }
+        }
+    }
     // ------------------------------------------------------------ 收藏 / 列表
 
     var favoritesState by mutableStateOf<Loadable<FavoritePage>>(Loadable.Idle)
@@ -399,5 +429,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         toast = null
     }
 }
+
 
 

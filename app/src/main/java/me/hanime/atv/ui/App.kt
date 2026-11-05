@@ -31,6 +31,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -63,6 +66,12 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
 
     BackHandler(enabled = vm.backStack.size > 1) { vm.goBack() }
 
+    val railFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(250)
+        runCatching { railFocus.requestFocus() }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -81,7 +90,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
         )
         Row(Modifier.fillMaxSize()) {
             if (chromeVisible) {
-                NavRail(vm, current)
+                NavRail(vm, current, railFocus)
             }
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 when (current) {
@@ -111,7 +120,7 @@ private val navItems = listOf(
 )
 
 @Composable
-private fun NavRail(vm: AppViewModel, current: Screen) {
+private fun NavRail(vm: AppViewModel, current: Screen, firstItemFocus: FocusRequester) {
     Column(
         modifier = Modifier
             .width(96.dp)
@@ -128,11 +137,12 @@ private fun NavRail(vm: AppViewModel, current: Screen) {
             fontWeight = FontWeight.Black,
             modifier = Modifier.padding(bottom = 22.dp),
         )
-        navItems.forEach { item ->
+        navItems.forEachIndexed { index, item ->
             val selected = current == item.screen || (current is Screen.Detail && item.screen == Screen.Home)
             NavRailButton(
                 item = item,
                 selected = selected,
+                focusRequester = if (index == 0) firstItemFocus else null,
                 onClick = {
                     if (item.screen == Screen.Favorites && !vm.isLoggedIn) {
                         vm.openLogin()
@@ -159,9 +169,11 @@ private fun NavRailButton(
     selected: Boolean,
     onClick: () -> Unit,
     showDot: Boolean = false,
+    focusRequester: FocusRequester? = null,
 ) {
     TvFocusable(
         onClick = onClick,
+        focusRequester = focusRequester,
         shape = RoundedCornerShape(18.dp),
         focusedScale = 1.04f,
         modifier = Modifier.width(76.dp),
@@ -237,4 +249,6 @@ private fun androidx.compose.foundation.layout.BoxScope.ToastHost(vm: AppViewMod
         }
     }
 }
+
+
 
