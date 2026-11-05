@@ -1,4 +1,4 @@
-# Hanime ATV
+﻿# Hanime ATV
 
 非官方 **Android TV** 客户端，内容来自 [hanime1.me](https://hanime1.me)。界面为遥控器（D-pad）操作设计，支持网页账号登录与 Google 登录，使用 Media3 ExoPlayer 播放。
 
@@ -61,3 +61,15 @@ adb connect <电视IP>:5555 && adb install -r HanimeATV-release.apk
 - **Cookie 登录**：在电脑浏览器登录后复制 Cookie，粘贴到 App 内（适合电视上输入不便时使用）。
 
 登录态通过 `CookieManager` 同步到 OkHttp，App 重启后保持。
+
+## 下载
+
+在 [Releases](https://github.com/WLGH01/hanime-atv/releases) 中下载最新的 `HanimeATV-release.apk` 安装即可。
+
+## 已知限制
+
+- 站点部分页面（评论、播放列表、下载、高级筛选）暂未做原生 UI，核心浏览/搜索/播放/账号功能已覆盖。
+- Google 登录依赖 WebView 内的 Google 授权页，Google 可能对部分设备/地区拒绝 WebView 授权，此时请使用邮箱登录或 Cookie 导入。
+- TV 上 WebView 获取焦点后，方向键会被网页消费，需要按 BACK 才能回到 App 按钮。
+- 站点启用 Cloudflare 防护时，可能会触发人机验证，App 会给出错误提示。
+- 本项目为第三方客户端，接口来自对网页 HTML 的解析，站点改版可能导致部分页面解析失败。

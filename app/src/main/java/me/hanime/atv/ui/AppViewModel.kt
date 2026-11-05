@@ -373,7 +373,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     fun loadFavorites(force: Boolean = false) {
-        val id = user?.id ?: run { openLogin(); return }
+        val id = user?.id ?: run {
+            favoritesState = Loadable.Failure("登录后可查看收藏")
+            return
+        }
         if (!force && favoritesState is Loadable.Success) return
         favoritesState = Loadable.Loading
         viewModelScope.launch {
@@ -429,6 +432,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         toast = null
     }
 }
+
 
 
 

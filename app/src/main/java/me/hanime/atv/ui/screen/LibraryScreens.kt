@@ -1,4 +1,4 @@
-package me.hanime.atv.ui.screen
+﻿package me.hanime.atv.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,7 +30,7 @@ import me.hanime.atv.ui.theme.Palette
 
 @Composable
 fun FavoritesScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
-    LaunchedEffect(Unit) { vm.loadFavorites() }
+    LaunchedEffect(Unit, vm.isLoggedIn) { if (vm.isLoggedIn) vm.loadFavorites() }
 
     Column(modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 28.dp)) {
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -40,7 +40,14 @@ fun FavoritesScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             }
         }
         Spacer(Modifier.height(18.dp))
-        when (val state = vm.favoritesState) {
+        if (!vm.isLoggedIn) {
+            Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize()) {
+                Spacer(Modifier.height(90.dp))
+                Text("登录后可同步站点收藏", color = Palette.TextSecondary, fontSize = 16.sp)
+                Spacer(Modifier.height(20.dp))
+                TvButton("去登录", { vm.openLogin() }, primary = true)
+            }
+        } else when (val state = vm.favoritesState) {
             is Loadable.Loading, Loadable.Idle -> LoadingView()
             is Loadable.Failure -> ErrorView(state.message, { vm.loadFavorites(force = true) })
             is Loadable.Success -> {
@@ -107,3 +114,4 @@ fun HistoryScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         }
     }
 }
+

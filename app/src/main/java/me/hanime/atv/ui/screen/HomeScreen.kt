@@ -1,4 +1,4 @@
-package me.hanime.atv.ui.screen
+﻿package me.hanime.atv.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -74,7 +75,7 @@ private fun HomeContent(vm: AppViewModel, page: HomePage, modifier: Modifier = M
         item(key = "hero") {
             HeroSection(
                 card = hero,
-                onPlay = { hero?.let { vm.openDetail(it.code) } },
+                onPlay = { hero?.let { vm.playCode(it.code) } },
                 onDetail = { hero?.let { vm.openDetail(it.code) } },
                 focusRequester = heroFocus,
             )
@@ -86,7 +87,7 @@ private fun HomeContent(vm: AppViewModel, page: HomePage, modifier: Modifier = M
             }
         }
 
-        items(page.rows, key = { it.title }) { row ->
+        itemsIndexed(page.rows) { index, row ->
             Column(Modifier.padding(top = 6.dp, bottom = 10.dp)) {
                 SectionTitle(
                     row.title,
@@ -226,3 +227,5 @@ private fun ContinueWatchingRow(vm: AppViewModel) {
         }
     }
 }
+
+
