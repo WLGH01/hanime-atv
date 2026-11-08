@@ -443,6 +443,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     private var phoneServer: PhoneLoginServer? = null
+    private var phoneTimeoutJob: kotlinx.coroutines.Job? = null
 
     fun startPhoneLogin() {
         if (phoneLogin.active) return
@@ -485,6 +486,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 url = url,
                 status = "请用手机扫描二维码",
             )
+            // 二维码/配对页只在需要时短暂开放，5 分钟无操作自动关闭
+            phoneTimeoutJob?.cancel()
+            phoneTimeoutJob = viewModelScope.launch {
+                kotlinx.coroutines.delay(5 * 60 * 1000L)
+                if (phoneLogin.active && !phoneLogin.finished) {
+                    stopPhoneServer(keepState = false)
+                    showToast("扫码登录已超时，需要时请重新打开登录页")
+                }
+            }
         }
     }
 
@@ -494,6 +504,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun stopPhoneServer(keepState: Boolean) {
+        phoneTimeoutJob?.cancel()
+        phoneTimeoutJob = null
         val server = phoneServer
         phoneServer = null
         if (server != null) {

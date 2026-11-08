@@ -32,7 +32,6 @@ import me.hanime.atv.ui.components.SectionTitle
 import me.hanime.atv.ui.components.TvButton
 import me.hanime.atv.ui.components.TvFocusable
 import me.hanime.atv.ui.theme.Palette
-import me.hanime.atv.ui.theme.currentLogicalSize
 
 @Composable
 fun SettingsScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
@@ -131,7 +130,7 @@ fun SettingsScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TvButton("清空观看历史", { vm.clearHistory() })
-                    TvButton("清空搜索历史", { /* 由搜索页管理 */ vm.showToast("可在搜索页长按清除") })
+                    TvButton("清空搜索历史", { vm.clearSearchHistory(); vm.showToast("已清空搜索历史") })
                 }
             }
         }
