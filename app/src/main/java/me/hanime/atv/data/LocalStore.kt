@@ -35,6 +35,20 @@ class LocalStore(context: Context) {
         get() = prefs.getInt(KEY_QUALITY, 0)
         set(value) = prefs.edit().putInt(KEY_QUALITY, value).apply()
 
+    /** 界面缩放系数（在电视密度归一化之后额外乘上去） */
+    var uiScale: Float
+        get() = prefs.getFloat(KEY_UI_SCALE, 1f).let { if (it <= 0f) 1f else it }
+        set(value) = prefs.edit().putFloat(KEY_UI_SCALE, value).apply()
+
+    /** 上次检查更新的时间，避免每次启动都打 GitHub API */
+    var lastUpdateCheck: Long
+        get() = prefs.getLong(KEY_UPDATE_CHECK, 0L)
+        set(value) = prefs.edit().putLong(KEY_UPDATE_CHECK, value).apply()
+
+    var skippedVersion: String?
+        get() = prefs.getString(KEY_SKIPPED_VERSION, null)
+        set(value) = prefs.edit().putString(KEY_SKIPPED_VERSION, value).apply()
+
     var searchHistory: List<String>
         get() = prefs.getString(KEY_SEARCH, null)?.let { raw ->
             runCatching {
@@ -116,5 +130,8 @@ class LocalStore(context: Context) {
         private const val KEY_QUALITY = "quality"
         private const val KEY_SEARCH = "search_history"
         private const val KEY_HISTORY = "history"
+        private const val KEY_UI_SCALE = "ui_scale"
+        private const val KEY_UPDATE_CHECK = "update_check_at"
+        private const val KEY_SKIPPED_VERSION = "skipped_version"
     }
 }

@@ -1,4 +1,4 @@
-﻿package me.hanime.atv.ui.screen
+package me.hanime.atv.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -70,7 +70,7 @@ private fun HomeContent(vm: AppViewModel, page: HomePage, modifier: Modifier = M
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 48.dp),
+        contentPadding = PaddingValues(bottom = 32.dp),
     ) {
         item(key = "hero") {
             HeroSection(
@@ -91,11 +91,11 @@ private fun HomeContent(vm: AppViewModel, page: HomePage, modifier: Modifier = M
             Column(Modifier.padding(top = 6.dp, bottom = 10.dp)) {
                 SectionTitle(
                     row.title,
-                    Modifier.padding(start = 44.dp, end = 44.dp, top = 8.dp, bottom = 12.dp),
+                    Modifier.padding(start = 32.dp, end = 32.dp, top = 6.dp, bottom = 8.dp),
                 )
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 44.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(18.dp),
+                    contentPadding = PaddingValues(horizontal = 32.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     items(row.items, key = { it.code }) { card ->
                         VideoCard(card = card, onClick = { vm.openDetail(card.code) })
@@ -116,7 +116,7 @@ private fun HeroSection(
     Box(
         Modifier
             .fillMaxWidth()
-            .height(470.dp),
+            .height(330.dp),
     ) {
         if (card != null) {
             AsyncImage(
@@ -155,16 +155,16 @@ private fun HeroSection(
         Column(
             Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 56.dp, bottom = 44.dp, end = 640.dp),
+                .padding(start = 36.dp, bottom = 28.dp, end = 420.dp),
         ) {
             Text(
                 card?.title ?: "Hanime ATV",
                 color = Color.White,
-                fontSize = 40.sp,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                lineHeight = 48.sp,
+                lineHeight = 32.sp,
             )
             Spacer(Modifier.height(12.dp))
             val meta = listOfNotNull(
@@ -175,10 +175,10 @@ private fun HeroSection(
             Text(
                 meta.ifBlank { "今日精选 · 高清无修动画" },
                 color = Palette.TextSecondary,
-                fontSize = 15.sp,
+                fontSize = 11.sp,
             )
-            Spacer(Modifier.height(24.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 TvButton(
                     text = "立即播放",
                     onClick = onPlay,
@@ -193,7 +193,7 @@ private fun HeroSection(
         Row(
             Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = 30.dp, end = 44.dp),
+                .padding(top = 20.dp, end = 32.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
@@ -202,7 +202,7 @@ private fun HeroSection(
                     .background(Color(0x66000000))
                     .padding(horizontal = 14.dp, vertical = 6.dp),
             ) {
-                Text("H · 高清在线", color = Palette.TextSecondary, fontSize = 12.sp)
+                Text("H · 高清在线", color = Palette.TextSecondary, fontSize = 10.sp)
             }
         }
     }
@@ -211,10 +211,10 @@ private fun HeroSection(
 @Composable
 private fun ContinueWatchingRow(vm: AppViewModel) {
     Column(Modifier.padding(top = 4.dp, bottom = 8.dp)) {
-        SectionTitle("继续观看", Modifier.padding(start = 44.dp, top = 6.dp, bottom = 12.dp))
+        SectionTitle("继续观看", Modifier.padding(start = 32.dp, top = 4.dp, bottom = 8.dp))
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 44.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            contentPadding = PaddingValues(horizontal = 32.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             items(vm.history.take(12), key = { it.code }) { item ->
                 VideoCard(

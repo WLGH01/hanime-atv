@@ -1,6 +1,5 @@
 package me.hanime.atv.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -46,18 +45,23 @@ private val DarkColors = darkColorScheme(
     onSurface = Palette.TextPrimary,
 )
 
+/**
+ * 电视上观看距离远、但屏幕也大，字号要收敛：
+ * 之前 28~40sp 的标题在 1.5x 密度电视上直接糊满屏，这里统一降到 18~26sp 区间。
+ */
 @Composable
 fun HanimeTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = DarkColors,
         typography = MaterialTheme.typography.copy(
-            displaySmall = TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold, color = Palette.TextPrimary),
-            headlineMedium = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Palette.TextPrimary),
-            titleLarge = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextPrimary),
-            titleMedium = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextPrimary),
-            bodyMedium = TextStyle(fontSize = 14.sp, color = Palette.TextPrimary),
-            bodySmall = TextStyle(fontSize = 12.sp, color = Palette.TextSecondary),
-            labelLarge = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Palette.TextPrimary),
+            displaySmall = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Palette.TextPrimary),
+            headlineMedium = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Palette.TextPrimary),
+            titleLarge = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextPrimary),
+            titleMedium = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextPrimary),
+            bodyLarge = TextStyle(fontSize = 14.sp, color = Palette.TextPrimary),
+            bodyMedium = TextStyle(fontSize = 13.sp, color = Palette.TextPrimary),
+            bodySmall = TextStyle(fontSize = 11.sp, color = Palette.TextSecondary),
+            labelLarge = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Palette.TextPrimary),
         ),
     ) {
         content()

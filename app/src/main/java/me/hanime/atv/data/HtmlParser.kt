@@ -17,11 +17,29 @@ object HtmlParser {
     private val userLink = Regex("""/user/(\d+)""")
     private val viewsAndDate = Regex("""觀看次數[：:]\s*(.+?)[\s\u00a0]+(\d{4}-\d{2}-\d{2})""")
     private val sourceScript = Regex("""const source\s*=\s*'([^']+)'""")
+    private val pageParam = Regex("""[?&]page=(\d+)""")
+    private val tagCount = Regex("""\s*[（(]\s*\d+\s*[)）]\s*$""")
 
     private fun doc(html: String): Document = Jsoup.parse(html, BASE)
 
     fun extractToken(html: String): String =
         doc(html).body().selectFirst("input[name=_token]")?.attr("value").orEmpty()
+
+    /** 从登录失败的响应里提取站点给出的错误提示（Laravel 校验错误/提示条） */
+    fun extractErrorMessage(html: String): String? {
+        if (html.isBlank()) return null
+        val body = doc(html).body()
+        val selectors = listOf(
+            ".alert.alert-danger", ".alert-danger", ".alert",
+            ".invalid-feedback", ".text-danger", ".help-block",
+            "#login .error", ".error-message", ".swal2-content",
+        )
+        for (selector in selectors) {
+            val text = body.selectFirst(selector)?.text()?.trim().orEmpty()
+            if (text.isNotBlank() && text.length < 160) return text
+        }
+        return null
+    }
 
     // ---------------------------------------------------------------- 首页
 
@@ -91,23 +109,22 @@ object HtmlParser {
     fun parseUser(body: Element): UserInfo? {
         val trigger = body.getElementById("user-modal-trigger")
         val triggerHref = trigger?.absUrl("href").orEmpty().ifBlank { trigger?.attr("href").orEmpty() }
-
-        val profileLink = body.selectFirst("#user-modal-dp-wrapper a[href*=/user/]")
-            ?: body.select("a[href*=/user/]").firstOrNull { a ->
-                val href = a.absUrl("href").ifBlank { a.attr("href") }
-                href.contains("/user/") && a.selectFirst("img") != null
-            }
-        val profileHref = profileLink?.absUrl("href").orEmpty()
-            .ifBlank { profileLink?.attr("href").orEmpty() }
-
-        val id = userLink.find(triggerHref)?.groupValues?.get(1)
-            ?: userLink.find(profileHref)?.groupValues?.get(1)
-
-        // 未登录时账号入口指向 /login，且页面上找不到用户主页/退出入口
-        val hasLogout = body.selectFirst("a[href*=/logout]") != null
-        if (id == null && !hasLogout) return null
+        val triggerId = userLink.find(triggerHref)?.groupValues?.get(1)
 
         val modal = body.getElementById("user-modal-dp-wrapper")
+        val profileLink = modal?.selectFirst("a[href*=/user/]")
+            ?: body.selectFirst("#user-modal-dp-wrapper a[href*=/user/]")
+        val profileHref = profileLink?.absUrl("href").orEmpty()
+            .ifBlank { profileLink?.attr("href").orEmpty() }
+        val profileId = userLink.find(profileHref)?.groupValues?.get(1)
+
+        // 未登录时账号入口指向 /login；只有出现"退出登录"或用户弹窗/用户主页才算已登录。
+        // 注意：影片/作者卡片里也有 /user/ 链接，不能作为已登录依据。
+        val hasLogout = body.selectFirst("a[href*=/logout]") != null
+        val loggedIn = hasLogout || triggerId != null || (modal != null && profileId != null)
+        if (!loggedIn) return null
+
+        val id = triggerId ?: profileId
         val avatar = trigger?.selectFirst("img")?.absUrl("src")
             ?: modal?.selectFirst("img")?.absUrl("src")
         val name = modal?.selectFirst("div[class*=name], h4, h5, .user-name")?.text()?.trim()
@@ -122,16 +139,27 @@ object HtmlParser {
     fun parseSearch(html: String, page: Int): SearchPage {
         val body = doc(html).body()
         val items = body.select(".video-item-container").mapNotNull { it.toCard() }
-        val hasNext = body.select("a[rel=next], .pagination a[rel=next]").isNotEmpty() ||
-            body.select(".pagination li.page-item a[aria-label=pagination.next]").isNotEmpty()
-        return SearchPage(items = items.distinctBy { it.code }, page = page, hasNext = hasNext)
+        return SearchPage(
+            items = items.distinctBy { it.code },
+            page = page,
+            hasNext = hasNextPage(body, page),
+        )
     }
 
     fun parseCardList(html: String, page: Int): FavoritePage {
         val body = doc(html).body()
         val items = body.select(".video-item-container").mapNotNull { it.toCard() }
-        val hasNext = body.select("a[rel=next]").isNotEmpty()
-        return FavoritePage(items = items.distinctBy { it.code }, page = page, hasNext = hasNext)
+        return FavoritePage(items = items.distinctBy { it.code }, page = page, hasNext = hasNextPage(body, page))
+    }
+
+    /** 分页链接里是否还有比当前页更大的页码（兼容 laravel 的 ?page=N 结构） */
+    private fun hasNextPage(body: Element, page: Int): Boolean {
+        if (body.select("a[rel=next]").isNotEmpty()) return true
+        val links = body.select(".pagination a[href], ul.pagination a[href], nav a[href*=page=]")
+        return links.any { a ->
+            val p = pageParam.find(a.attr("href"))?.groupValues?.get(1)?.toIntOrNull()
+            p != null && p > page
+        }
     }
 
     private fun Element.toCard(): HanimeCard? {
@@ -154,6 +182,9 @@ object HtmlParser {
         val uploader = selectFirst(".subtitle a")?.text()?.trim()
         val timeAgo = selectFirst(".subtitle-time")?.text()
             ?.replace("•", "")?.trim()
+        val rating = stats.firstOrNull { it.contains("%") }
+            ?: selectFirst(".stat-item i.material-icons, .stat-item .thumb_up")
+                ?.text()?.trim()?.takeIf { it.contains("%") }
         return HanimeCard(
             code = code,
             title = title.ifBlank { "未命名影片" },
@@ -162,6 +193,7 @@ object HtmlParser {
             views = stats.firstOrNull { it.contains("次") },
             uploader = uploader?.ifBlank { null },
             timeAgo = timeAgo?.ifBlank { null },
+            rating = rating?.trim()?.ifBlank { null },
         )
     }
 
@@ -204,11 +236,12 @@ object HtmlParser {
         val metaText = metaEl?.text().orEmpty().replace('\u00a0', ' ')
         val meta = viewsAndDate.find(metaText)
 
-        val description = body.selectFirst(".video-caption-text")?.text()?.trim()
-            ?.ifBlank { null }
-        val tags = body.select(".single-video-tag a").map { a ->
-            a.text().trim().removePrefix("#").trim()
-        }.filter { it.isNotBlank() }.distinct()
+        val description = (body.selectFirst(".video-caption-text")
+            ?: body.selectFirst("#video-caption")
+            ?: body.selectFirst(".video-description"))
+            ?.text()?.trim()?.ifBlank { null }
+
+        val tags = parseTags(body)
 
         val artist = body.selectFirst("#video-artist-name")?.text()?.trim()?.ifBlank { null }
         val artistAvatar = body.selectFirst("a[href*=/user/] img[style*=border-radius]")
@@ -246,6 +279,20 @@ object HtmlParser {
             userId = userId,
         )
     }
+
+    /**
+     * 详情页的标签是 `/search?tags[]=巨乳&genre=裏番` 形式的链接，文字形如 `巨乳 (4)`。
+     * 这里同时兼容旧的 `.single-video-tag` 结构。
+     */
+    private fun parseTags(body: Element): List<String> {
+        val byHref = body.select("a[href*=tags]").mapNotNull { a ->
+            val href = a.attr("href")
+            if (!href.contains("tags")) return@mapNotNull null
+            a.text().trim().replace(tagCount, "").removePrefix("#").trim().ifBlank { null }
+        }
+        val fallback = body.select(".single-video-tag a").mapNotNull { a ->
+            a.text().trim().removePrefix("#").trim().ifBlank { null }
+        }
+        return (byHref.ifEmpty { fallback }).distinct().take(40)
+    }
 }
-
-

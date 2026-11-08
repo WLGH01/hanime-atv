@@ -34,7 +34,7 @@ fun VideoCard(
     card: HanimeCard,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    width: Dp = 268.dp,
+    width: Dp = 200.dp,
     progress: Float? = null,
     progressText: String? = null,
 ) {
@@ -68,9 +68,9 @@ fun VideoCard(
                             .padding(8.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color(0xCC000000))
-                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
                     ) {
-                        Text(card.duration, color = Color.White, fontSize = 11.sp)
+                        Text(card.duration, color = Color.White, fontSize = 10.sp)
                     }
                 }
                 Box(
@@ -103,7 +103,7 @@ fun VideoCard(
             Text(
                 text = card.title,
                 color = if (focused) Color.White else Palette.TextPrimary,
-                fontSize = 13.sp,
+                fontSize = 11.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium,
@@ -115,7 +115,7 @@ fun VideoCard(
                 Text(
                     text = sub,
                     color = Palette.TextTertiary,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

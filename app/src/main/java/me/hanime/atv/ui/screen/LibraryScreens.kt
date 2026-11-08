@@ -1,4 +1,4 @@
-﻿package me.hanime.atv.ui.screen
+package me.hanime.atv.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,18 +32,18 @@ import me.hanime.atv.ui.theme.Palette
 fun FavoritesScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     LaunchedEffect(Unit, vm.isLoggedIn) { if (vm.isLoggedIn) vm.loadFavorites() }
 
-    Column(modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 28.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 20.dp)) {
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             SectionTitle("我的收藏", Modifier.weight(1f))
             if (vm.isLoggedIn) {
-                Text(vm.user?.name.orEmpty(), color = Palette.TextSecondary, fontSize = 13.sp)
+                Text(vm.user?.name.orEmpty(), color = Palette.TextSecondary, fontSize = 11.sp)
             }
         }
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(12.dp))
         if (!vm.isLoggedIn) {
             Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize()) {
                 Spacer(Modifier.height(90.dp))
-                Text("登录后可同步站点收藏", color = Palette.TextSecondary, fontSize = 16.sp)
+                Text("登录后可同步站点收藏", color = Palette.TextSecondary, fontSize = 11.sp)
                 Spacer(Modifier.height(20.dp))
                 TvButton("去登录", { vm.openLogin() }, primary = true)
             }
@@ -55,10 +55,10 @@ fun FavoritesScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                     EmptyView("还没有收藏的影片")
                 } else {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(268.dp),
-                        horizontalArrangement = Arrangement.spacedBy(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(24.dp),
-                        contentPadding = PaddingValues(bottom = 60.dp),
+                        columns = GridCells.Adaptive(196.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(bottom = 40.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         items(vm.favorites, key = { it.code }) { card ->
@@ -80,22 +80,22 @@ fun FavoritesScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
 @Composable
 fun HistoryScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 28.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 20.dp)) {
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             SectionTitle("观看历史", Modifier.weight(1f))
             if (vm.history.isNotEmpty()) {
                 TvButton("清空", { vm.clearHistory() })
             }
         }
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(12.dp))
         if (vm.history.isEmpty()) {
             EmptyView("还没有观看记录")
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(268.dp),
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-                contentPadding = PaddingValues(bottom = 60.dp),
+                columns = GridCells.Adaptive(196.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 40.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 items(vm.history, key = { it.code }) { item ->

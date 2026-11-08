@@ -1,11 +1,10 @@
-﻿package me.hanime.atv.data
+package me.hanime.atv.data
 
 import android.content.Context
 import android.webkit.CookieManager
 import okhttp3.Cookie
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import org.json.JSONObject
 
 class HanimeRepository(private val client: HanimeClient, private val store: LocalStore) {
 
@@ -17,17 +16,15 @@ class HanimeRepository(private val client: HanimeClient, private val store: Loca
         return page
     }
 
-    suspend fun search(
-        query: String?,
-        page: Int,
-        genre: String? = null,
-        sort: String? = null,
-    ): SearchPage {
-        val params = linkedMapOf("page" to page.toString())
-        if (!query.isNullOrBlank()) params["query"] = query
-        if (!genre.isNullOrBlank()) params["genre"] = genre
-        if (!sort.isNullOrBlank()) params["sort"] = sort
-        return HtmlParser.parseSearch(client.get("/search", params), page)
+    /** 按站点 `/search` 的筛选参数拉取列表：query / genre / tags[] / sort / page */
+    suspend fun search(filter: SearchFilter, page: Int): SearchPage {
+        val params = mutableListOf<Pair<String, String>>()
+        if (filter.query.isNotBlank()) params += "query" to filter.query.trim()
+        if (!filter.genre.isNullOrBlank()) params += "genre" to filter.genre
+        filter.tags.forEach { params += "tags[]" to it }
+        params += "sort" to filter.sort.value
+        if (page > 1) params += "page" to page.toString()
+        return HtmlParser.parseSearch(client.getMulti("/search", params), page)
     }
 
     suspend fun loadVideo(code: String): VideoDetail =
@@ -104,30 +101,61 @@ class HanimeRepository(private val client: HanimeClient, private val store: Loca
 
     fun cachedUser(): UserInfo? = store.user
 
-    /** 邮箱 + 密码登录：先取 CSRF token，再提交表单，最后用首页验证会话 */
-    suspend fun loginWithPassword(email: String, password: String): Boolean {
-        val token = HtmlParser.extractToken(client.get("/login"))
-        client.postForm(
-            "/login",
-            mapOf(
-                "_token" to token,
-                "email" to email,
-                "password" to password,
-            ),
-        )
-        return verifyLogin() != null
+    /**
+     * 邮箱 + 密码登录：先取 CSRF token，再提交表单，最后用首页验证会话。
+     * 失败时会把站点返回的提示文字带出来，避免只显示"登录失败"。
+     */
+    suspend fun loginWithPassword(email: String, password: String): LoginResult {
+        val loginHtml = runCatching { client.get("/login") }.getOrElse {
+            return LoginResult.Failure("无法打开登录页：${it.message ?: "网络异常"}")
+        }
+        val token = HtmlParser.extractToken(loginHtml)
+        val body = runCatching {
+            client.postForm(
+                "/login",
+                linkedMapOf(
+                    "_token" to token,
+                    "email" to email,
+                    "password" to password,
+                ),
+            )
+        }.getOrElse {
+            return LoginResult.Failure("提交登录失败：${it.message ?: "网络异常"}")
+        }
+        val error = HtmlParser.extractErrorMessage(body)
+        val user = verifyLogin()
+        return if (user != null) {
+            LoginResult.Success(user)
+        } else {
+            LoginResult.Failure(error ?: "登录失败：账号或密码不正确，或站点要求人机验证")
+        }
     }
 
-    /** 手动粘贴 cookie（例如从电脑浏览器复制），适用于电视上无法完成 Google 登录的情况 */
-    suspend fun loginWithCookieString(raw: String): Boolean {
+    /** 手动粘贴 cookie（例如从电脑浏览器复制），适合电视上无法完成 Google 授权的情况 */
+    suspend fun loginWithCookieString(raw: String): LoginResult {
         val cookies = raw.split(";", "\n")
             .map { it.trim() }
             .filter { it.isNotEmpty() && it.contains("=") }
             .mapNotNull { Cookie.parse(url, it) }
-        if (cookies.isEmpty()) return false
+        if (cookies.isEmpty()) return LoginResult.Failure("没有解析到有效的 Cookie 键值对")
         client.cookieJar.saveFromResponse(url, cookies)
-        return verifyLogin() != null
+        val user = verifyLogin()
+        return if (user != null) LoginResult.Success(user) else LoginResult.Failure("Cookie 无效或已过期")
+    }
+
+    /** 供局域网扫码登录服务使用：登录成功后写回本地用户缓存 */
+    fun rememberUser(user: UserInfo) {
+        store.user = user
+    }
+
+    fun localStore(): LocalStore = store
+
+    fun okHttpClient() = client.httpClient
+
+    companion object {
+        fun fromContext(context: Context): HanimeRepository {
+            val app = context.applicationContext as me.hanime.atv.HanimeApp
+            return app.repository
+        }
     }
 }
-
-

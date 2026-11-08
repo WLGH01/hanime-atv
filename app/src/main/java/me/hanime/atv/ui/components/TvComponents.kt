@@ -60,7 +60,7 @@ fun TvFocusable(
     focusedScale: Float = 1.05f,
     shape: RoundedCornerShape = RoundedCornerShape(14.dp),
     borderColor: Color = Palette.Accent,
-    borderWidth: Dp = 2.dp,
+    borderWidth: Dp = 1.5.dp,
     enabled: Boolean = true,
     onFocused: (Boolean) -> Unit = {},
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
@@ -138,7 +138,7 @@ fun TvButton(
             modifier = Modifier
                 .clip(shape)
                 .then(background)
-                .padding(horizontal = 26.dp, vertical = 13.dp),
+                .padding(horizontal = 18.dp, vertical = 9.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -149,13 +149,13 @@ fun TvButton(
                         imageVector = icon,
                         contentDescription = null,
                         tint = if (primary) Color.White else Palette.TextPrimary,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(16.dp),
                     )
-                    Spacer(Modifier.size(10.dp))
+                    Spacer(Modifier.size(8.dp))
                 }
                 Text(
                     text = text,
-                    fontSize = 16.sp,
+                    fontSize = 13.sp,
                     color = if (primary) Color.White else Palette.TextPrimary,
                     style = MaterialTheme.typography.labelLarge,
                 )
@@ -168,8 +168,8 @@ fun TvButton(
 fun LoadingView(modifier: Modifier = Modifier, text: String = "正在加载…") {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = Palette.Accent, strokeWidth = 3.dp)
-            Spacer(Modifier.height(18.dp))
+            CircularProgressIndicator(color = Palette.Accent, strokeWidth = 2.5.dp, modifier = Modifier.size(36.dp))
+            Spacer(Modifier.height(12.dp))
             Text(text, color = Palette.TextSecondary)
         }
     }
@@ -192,7 +192,7 @@ fun ErrorView(
                 message,
                 color = Palette.TextSecondary,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(0.6f),
+                modifier = Modifier.fillMaxWidth(0.72f),
             )
             Spacer(Modifier.height(24.dp))
             TvButton("重试", onRetry, primary = true)
@@ -203,7 +203,7 @@ fun ErrorView(
 @Composable
 fun EmptyView(text: String, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text, color = Palette.TextTertiary, fontSize = 16.sp)
+        Text(text, color = Palette.TextTertiary, fontSize = 13.sp)
     }
 }
 
@@ -212,7 +212,7 @@ fun SectionTitle(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
         modifier = modifier,
-        fontSize = 21.sp,
+        fontSize = 17.sp,
         color = Palette.TextPrimary,
         fontWeight = FontWeight.SemiBold,
     )

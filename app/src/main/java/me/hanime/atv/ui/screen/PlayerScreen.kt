@@ -552,10 +552,10 @@ private fun PlayerContent(vm: AppViewModel, video: VideoDetail, modifier: Modifi
             if (isBuffering) {
                 CircularProgressIndicator(
                     color = Palette.Accent,
-                    strokeWidth = 3.dp,
+                    strokeWidth = 2.5.dp,
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .size(58.dp),
+                        .size(44.dp),
                 )
             }
 
@@ -572,12 +572,12 @@ private fun PlayerContent(vm: AppViewModel, video: VideoDetail, modifier: Modifi
                     Modifier
                         .clip(RoundedCornerShape(999.dp))
                         .background(Color(0xB3000000))
-                        .padding(horizontal = 30.dp, vertical = 14.dp),
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
                 ) {
                     Text(
                         text = hint.orEmpty(),
                         color = Color.White,
-                        fontSize = 20.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
@@ -596,7 +596,7 @@ private fun PlayerContent(vm: AppViewModel, video: VideoDetail, modifier: Modifi
                         Modifier
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
-                            .height(280.dp)
+                            .height(200.dp)
                             .background(
                                 Brush.verticalGradient(
                                     listOf(Color(0xD9000000), Color(0x00000000)),
@@ -608,7 +608,7 @@ private fun PlayerContent(vm: AppViewModel, video: VideoDetail, modifier: Modifi
                         Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .height(440.dp)
+                            .height(300.dp)
                             .background(
                                 Brush.verticalGradient(
                                     listOf(Color(0x00000000), Color(0xCC000000), Color(0xF2000000)),
@@ -681,18 +681,18 @@ private fun TopInfo(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.padding(start = 56.dp, end = 120.dp, top = 42.dp),
+        modifier = modifier.padding(start = 40.dp, end = 120.dp, top = 28.dp),
     ) {
         Text(
             text = title,
             color = Palette.TextPrimary,
-            fontSize = 30.sp,
-            lineHeight = 38.sp,
+            fontSize = 22.sp,
+            lineHeight = 28.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(10.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -711,12 +711,12 @@ private fun InfoChip(text: String, accent: Boolean = false) {
         Modifier
             .clip(shape)
             .background(if (accent) Palette.Accent.copy(alpha = 0.22f) else Color(0x4D000000))
-            .padding(horizontal = 16.dp, vertical = 7.dp),
+            .padding(horizontal = 12.dp, vertical = 5.dp),
     ) {
         Text(
             text = text,
             color = if (accent) Palette.AccentSoft else Palette.TextSecondary,
-            fontSize = 15.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
         )
     }
@@ -747,12 +747,12 @@ private fun BottomControls(
     onInteract: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val barShape = RoundedCornerShape(30.dp)
+    val barShape = RoundedCornerShape(22.dp)
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 44.dp)
-            .padding(bottom = 34.dp),
+            .padding(horizontal = 34.dp)
+            .padding(bottom = 22.dp),
     ) {
         if (menu != PlayerMenu.None) {
             val isQuality = menu == PlayerMenu.Quality
@@ -777,20 +777,20 @@ private fun BottomControls(
                     onInteract = onInteract,
                 )
             }
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(14.dp))
         }
 
         Column(
             Modifier
                 .fillMaxWidth()
-                .shadow(26.dp, barShape)
+                .shadow(16.dp, barShape)
                 .clip(barShape)
                 .background(
                     Brush.horizontalGradient(
                         listOf(Color(0xE6141420), Color(0xE61C1A2B)),
                     ),
                 )
-                .padding(horizontal = 32.dp, vertical = 18.dp),
+                .padding(horizontal = 22.dp, vertical = 12.dp),
         ) {
             SeekBar(
                 positionMs = positionMs,
@@ -857,25 +857,25 @@ private fun SeekBar(
             Text(
                 text = formatTime(positionMs),
                 color = Palette.TextPrimary,
-                fontSize = 18.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
                 text = " / ",
                 color = Palette.TextTertiary,
-                fontSize = 16.sp,
+                fontSize = 13.sp,
             )
             Text(
                 text = formatTime(durationMs),
                 color = Palette.TextSecondary,
-                fontSize = 16.sp,
+                fontSize = 13.sp,
             )
         }
         Spacer(Modifier.height(2.dp))
         Canvas(
             Modifier
                 .fillMaxWidth()
-                .height(44.dp)
+                .height(30.dp)
                 .focusRequester(focusRequester)
                 .focusable()
                 .onFocusChanged {
@@ -929,20 +929,20 @@ private fun SeekBar(
                     )
                 },
         ) {
-            val trackHeight = if (focused) 12.dp.toPx() else 8.dp.toPx()
+            val trackHeight = if (focused) 6.dp.toPx() else 4.dp.toPx()
             val centerY = size.height / 2f
             val topLeftY = centerY - trackHeight / 2f
             val corner = CornerRadius(trackHeight / 2f, trackHeight / 2f)
 
             drawRoundRect(
-                color = Color(0x38FFFFFF),
+                color = Color(0x33FFFFFF),
                 topLeft = Offset(0f, topLeftY),
                 size = Size(size.width, trackHeight),
                 cornerRadius = corner,
             )
             if (bufferedFraction > 0f) {
                 drawRoundRect(
-                    color = Color(0x59FFFFFF),
+                    color = Color(0x4DFFFFFF),
                     topLeft = Offset(0f, topLeftY),
                     size = Size(size.width * bufferedFraction, trackHeight),
                     cornerRadius = corner,
@@ -960,12 +960,12 @@ private fun SeekBar(
                 val thumbX = size.width * fraction
                 drawCircle(
                     color = Palette.Accent.copy(alpha = 0.35f),
-                    radius = 16.dp.toPx(),
+                    radius = 10.dp.toPx(),
                     center = Offset(thumbX, centerY),
                 )
                 drawCircle(
                     color = Color.White,
-                    radius = 9.dp.toPx(),
+                    radius = 6.dp.toPx(),
                     center = Offset(thumbX, centerY),
                 )
             }
@@ -985,7 +985,7 @@ private fun ControlTile(
     val shape = RoundedCornerShape(999.dp)
     TvFocusable(
         onClick = onClick,
-        modifier = modifier.size(58.dp),
+        modifier = modifier.size(46.dp),
         shape = shape,
         focusedScale = 1.08f,
         onFocused = { if (it) onFocused() },
@@ -1006,18 +1006,18 @@ private fun ControlTile(
 private fun PlayGlyph(isPlaying: Boolean) {
     if (isPlaying) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.width(6.dp).height(24.dp).clip(RoundedCornerShape(2.dp)).background(Color.White))
-            Box(Modifier.width(6.dp).height(24.dp).clip(RoundedCornerShape(2.dp)).background(Color.White))
+            Box(Modifier.width(5.dp).height(18.dp).clip(RoundedCornerShape(2.dp)).background(Color.White))
+            Box(Modifier.width(5.dp).height(18.dp).clip(RoundedCornerShape(2.dp)).background(Color.White))
         }
     } else {
         Icon(
             imageVector = Icons.Filled.PlayArrow,
             contentDescription = "播放",
             tint = Color.White,
-            modifier = Modifier.size(32.dp),
+            modifier = Modifier.size(24.dp),
         )
     }
 }
@@ -1033,12 +1033,12 @@ private fun SkipGlyph(forward: Boolean) {
             },
             contentDescription = null,
             tint = Color.White,
-            modifier = Modifier.size(26.dp),
+            modifier = Modifier.size(20.dp),
         )
         Text(
             text = "10",
             color = Color.White,
-            fontSize = 17.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -1063,21 +1063,21 @@ private fun ControlChip(
             modifier = Modifier
                 .clip(shape)
                 .background(if (focused) Palette.Accent.copy(alpha = 0.28f) else Color(0x26FFFFFF))
-                .padding(horizontal = 22.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = text,
                 color = if (focused) Palette.TextPrimary else Palette.TextSecondary,
-                fontSize = 17.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(6.dp))
             Icon(
                 imageVector = Icons.Filled.KeyboardArrowUp,
                 contentDescription = null,
                 tint = if (focused) Palette.Accent else Palette.TextTertiary,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(16.dp),
             )
         }
     }
@@ -1097,18 +1097,18 @@ private fun SelectorMenu(
     val shape = RoundedCornerShape(24.dp)
     Column(
         modifier = Modifier
-            .width(340.dp)
-            .shadow(26.dp, shape)
+            .width(260.dp)
+            .shadow(18.dp, shape)
             .clip(shape)
             .background(Color(0xF2141421))
-            .padding(16.dp),
+            .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = title,
             color = Palette.TextTertiary,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
         )
         options.forEachIndexed { index, label ->
             TvFocusable(
@@ -1130,13 +1130,13 @@ private fun SelectorMenu(
                             },
                             RoundedCornerShape(14.dp),
                         )
-                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         text = label,
                         color = if (index == selected) Palette.AccentSoft else Palette.TextPrimary,
-                        fontSize = 17.sp,
+                        fontSize = 14.sp,
                         fontWeight = if (index == selected) FontWeight.SemiBold else FontWeight.Normal,
                     )
                     Spacer(Modifier.weight(1f))
@@ -1144,13 +1144,13 @@ private fun SelectorMenu(
                         Text(
                             text = "✓",
                             color = Palette.Accent,
-                            fontSize = 16.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                         )
                     }
                 }
             }
-            if (index != options.lastIndex) Spacer(Modifier.height(6.dp))
+            if (index != options.lastIndex) Spacer(Modifier.height(4.dp))
         }
     }
 }
@@ -1178,25 +1178,25 @@ private fun PlayerErrorPanel(
             Text(
                 text = "播放失败",
                 color = Palette.TextPrimary,
-                fontSize = 30.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(14.dp))
-            Text(
-                text = message,
-                color = Palette.TextSecondary,
-                fontSize = 17.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(0.55f),
             )
             Spacer(Modifier.height(12.dp))
             Text(
+                text = message,
+                color = Palette.TextSecondary,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(0.55f),
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
                 text = "可以尝试切换清晰度，或返回详情页重新解析",
                 color = Palette.TextTertiary,
-                fontSize = 15.sp,
+                fontSize = 12.sp,
             )
-            Spacer(Modifier.height(36.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            Spacer(Modifier.height(28.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 TvButton(
                     text = "重试",
                     onClick = onRetry,
@@ -1234,28 +1234,28 @@ private fun PlaybackProblem(
             Text(
                 text = "无法播放",
                 color = Palette.TextPrimary,
-                fontSize = 34.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
             )
             if (!title.isNullOrBlank()) {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
                 Text(
                     text = title,
                     color = Palette.TextSecondary,
-                    fontSize = 20.sp,
+                    fontSize = 16.sp,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
             Text(
                 text = message,
                 color = Palette.TextTertiary,
-                fontSize = 17.sp,
+                fontSize = 14.sp,
                 textAlign = TextAlign.Center,
             )
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(28.dp))
             TvButton(
                 text = "返回",
                 onClick = onBack,

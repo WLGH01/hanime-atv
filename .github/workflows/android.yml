@@ -27,6 +27,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(grep -E '^versionName=' version.properties | cut -d= -f2 | tr -d ' \r')
+          CODE=$(grep -E '^versionCode=' version.properties | cut -d= -f2 | tr -d ' \r')
+          if [ -z "$VERSION" ]; then echo "version.properties 缺少 versionName"; exit 1; fi
+          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "构建版本 v$VERSION ($CODE)"
+
       - name: Show Android SDK
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
@@ -48,19 +58,23 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build APKs
-        run: ./gradlew assembleDebug assembleRelease --stacktrace --no-daemon
+        run: |
+          ./gradlew assembleDebug assembleRelease --stacktrace --no-daemon \
+            -PversionName="${{ steps.version.outputs.name }}" \
+            -PversionCode="${{ steps.version.outputs.code }}"
 
       - name: Collect artifacts
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/HanimeATV-debug.apk
-          cp app/build/outputs/apk/release/app-release.apk dist/HanimeATV-release.apk
+          VERSION="${{ steps.version.outputs.name }}"
+          cp app/build/outputs/apk/release/app-release.apk "dist/HanimeATV-v${VERSION}-release.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/HanimeATV-v${VERSION}-debug.apk"
           ls -lh dist
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: HanimeATV-apk
+          name: HanimeATV-v${{ steps.version.outputs.name }}
           path: dist/*.apk
           if-no-files-found: error
 
@@ -68,13 +82,15 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ github.run_number }}
-          name: Hanime ATV build ${{ github.run_number }}
+          tag_name: v${{ steps.version.outputs.name }}
+          name: Hanime ATV v${{ steps.version.outputs.name }}
           body: |
-            自动构建的 Android TV 安装包（debug 签名，可直接安装）。
+            Hanime ATV v${{ steps.version.outputs.name }}（versionCode ${{ steps.version.outputs.code }}）
 
-            - `HanimeATV-release.apk`：推荐安装
-            - `HanimeATV-debug.apk`：调试包（applicationId 带 .debug，可与正式包共存）
+            安装包使用 debug 签名，可直接安装覆盖旧版本；应用内「设置 → 版本与更新」会自动检测本页面的新版本并下载安装。
+
+            - `HanimeATV-v${{ steps.version.outputs.name }}-release.apk`：推荐安装
+            - `HanimeATV-v${{ steps.version.outputs.name }}-debug.apk`：调试包（applicationId 带 .debug，可与正式包共存）
           files: dist/*.apk
           make_latest: true
         env:

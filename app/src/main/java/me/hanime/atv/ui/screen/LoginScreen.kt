@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,16 +51,20 @@ import me.hanime.atv.ui.AppViewModel
 import me.hanime.atv.ui.components.TvButton
 import me.hanime.atv.ui.components.TvFocusable
 import me.hanime.atv.ui.components.TvKeyboard
+import me.hanime.atv.ui.login.QrCodeImage
 import me.hanime.atv.ui.theme.Palette
 
-// 登录页是全屏独立页面（没有左侧导航栏），三种登录方式并列成 Tab。
+// 登录页是全屏独立页面（没有左侧导航栏）。
+// 主路径是"手机扫码"：电视只负责显示二维码，账号密码/Google 授权都在手机上完成，
+// 彻底绕开电视屏幕键盘打不出大写符号、WebView 被 Google 判"浏览器不安全"这两个坑。
 private const val GOOGLE_LOGIN_URL = "https://hanime1.me/auth/google"
 private const val EMAIL_LOGIN_URL = "https://hanime1.me/login"
 
 private enum class LoginTab(val label: String) {
+    Scan("扫码登录"),
     Email("邮箱登录"),
-    Google("Google 登录"),
     Cookie("Cookie 导入"),
+    Google("Google (TV)"),
 }
 
 /** 当前正在用屏幕键盘编辑哪个输入框 */
@@ -69,7 +74,7 @@ private enum class EditTarget { Email, Password, Cookie }
 fun LoginScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val context = LocalContext.current
 
-    var tab by remember { mutableStateOf(LoginTab.Email) }
+    var tab by remember { mutableStateOf(LoginTab.Scan) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var cookie by remember { mutableStateOf("") }
@@ -82,6 +87,7 @@ fun LoginScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val emailFocus = remember { FocusRequester() }
     val passwordFocus = remember { FocusRequester() }
     val cookieFocus = remember { FocusRequester() }
+    val scanActionFocus = remember { FocusRequester() }
 
     fun focusFor(target: EditTarget): FocusRequester = when (target) {
         EditTarget.Email -> emailFocus
@@ -102,7 +108,12 @@ fun LoginScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         runCatching { focusFor(target).requestFocus() }
     }
 
-    // 默认焦点落在“邮箱登录”Tab，符合遥控器从顶部开始操作的习惯
+    // 进入登录页即启动局域网配对服务；VM 内部会判断是否已启动，重复调用无副作用
+    LaunchedEffect(Unit) {
+        vm.ensurePhoneServer()
+    }
+
+    // 默认焦点落在“扫码登录”Tab，符合遥控器从顶部开始操作的习惯
     LaunchedEffect(Unit) {
         delay(220)
         runCatching { tabFocus.requestFocus() }
@@ -116,19 +127,21 @@ fun LoginScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 44.dp, vertical = 20.dp),
+                .padding(horizontal = 36.dp, vertical = 16.dp),
         ) {
             LoginHeader(vm = vm, backFocus = backFocus, onBack = { vm.goBack() })
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
             LoginTabs(selected = tab, tabFocus = tabFocus, onSelect = { tab = it })
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
             Box(Modifier.fillMaxWidth().weight(1f)) {
                 when (tab) {
+                    LoginTab.Scan -> ScanLoginTab(vm, scanActionFocus)
+
                     LoginTab.Email -> EmailLoginTab(
+                        vm = vm,
                         email = email,
                         password = password,
-                        loginBusy = vm.loginBusy,
                         emailFocus = emailFocus,
                         passwordFocus = passwordFocus,
                         onEditEmail = {
@@ -139,24 +152,20 @@ fun LoginScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                             draft = password
                             editing = EditTarget.Password
                         },
-                        onSubmit = { vm.loginWithPassword(email, password) },
                         onClear = {
                             email = ""
                             password = ""
                         },
                     )
 
-                    LoginTab.Google -> GoogleLoginTab(vm)
-
                     LoginTab.Cookie -> CookieImportTab(
-                        busy = vm.loginBusy,
+                        vm = vm,
                         cookie = cookie,
                         cookieFocus = cookieFocus,
                         onEdit = {
                             draft = cookie
                             editing = EditTarget.Cookie
                         },
-                        onSubmit = { vm.loginWithCookieString(normalizeCookieInput(cookie)) },
                         onClear = { cookie = "" },
                         onPaste = {
                             val text = readClipboard(context)
@@ -168,6 +177,8 @@ fun LoginScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                             }
                         },
                     )
+
+                    LoginTab.Google -> GoogleLoginTab(vm)
                 }
             }
         }
@@ -185,7 +196,7 @@ fun LoginScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 masked = target == EditTarget.Password,
                 doneLabel = if (target == EditTarget.Cookie) "保存" else "完成",
                 hint = when (target) {
-                    EditTarget.Email -> "屏幕键盘支持 A-Z、0-9 与 @ . - _"
+                    EditTarget.Email -> "Shift 切换大写，?123 切到符号键盘"
                     EditTarget.Password -> "密码以圆点显示，不会明文出现在屏幕上"
                     EditTarget.Cookie -> "Cookie 很长时，建议在电脑上复制后使用“从剪贴板粘贴”"
                 },
@@ -207,46 +218,43 @@ private fun LoginHeader(vm: AppViewModel, backFocus: FocusRequester, onBack: () 
             Text(
                 "登录 Hanime",
                 color = Palette.TextPrimary,
-                fontSize = 32.sp,
+                fontSize = 21.sp,
                 fontWeight = FontWeight.Bold,
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(3.dp))
             Text(
-                "登录后可同步收藏、稍后再看与观看记录",
+                "推荐手机扫码登录：手机上输入，电视无需打字",
                 color = Palette.TextTertiary,
-                fontSize = 15.sp,
-            )
-        }
-
-        if (vm.isLoggedIn) {
-            Box(
-                Modifier
-                    .size(9.dp)
-                    .background(Palette.Success, RoundedCornerShape(50)),
-            )
-            Spacer(Modifier.width(9.dp))
-            Text(
-                text = vm.user?.name ?: "已登录",
-                color = Palette.TextPrimary,
-                fontSize = 17.sp,
+                fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 220.dp),
-            )
-            Spacer(Modifier.width(16.dp))
-            TvButton("退出登录", { vm.logout() })
-        } else {
-            Text(
-                "未登录",
-                color = Palette.TextTertiary,
-                fontSize = 16.sp,
-                modifier = Modifier
-                    .background(Palette.Surface, RoundedCornerShape(999.dp))
-                    .padding(horizontal = 20.dp, vertical = 9.dp),
             )
         }
 
-        Spacer(Modifier.width(20.dp))
+        Box(
+            Modifier
+                .size(8.dp)
+                .background(
+                    if (vm.isLoggedIn) Palette.Success else Palette.TextTertiary,
+                    RoundedCornerShape(50),
+                ),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = if (vm.isLoggedIn) (vm.user?.name ?: "已登录") else "未登录",
+            color = if (vm.isLoggedIn) Palette.TextPrimary else Palette.TextTertiary,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 180.dp),
+        )
+
+        if (vm.isLoggedIn) {
+            Spacer(Modifier.width(14.dp))
+            TvButton("退出登录", { vm.logout() })
+        }
+
+        Spacer(Modifier.width(14.dp))
         TvFocusable(
             onClick = onBack,
             focusRequester = backFocus,
@@ -256,13 +264,13 @@ private fun LoginHeader(vm: AppViewModel, backFocus: FocusRequester, onBack: () 
             Text(
                 "返回",
                 color = if (focused) Palette.TextPrimary else Palette.TextSecondary,
-                fontSize = 16.sp,
+                fontSize = 13.sp,
                 modifier = Modifier
                     .background(
                         if (focused) Palette.SurfaceHigh else Palette.Surface,
                         RoundedCornerShape(999.dp),
                     )
-                    .padding(horizontal = 24.dp, vertical = 11.dp),
+                    .padding(horizontal = 20.dp, vertical = 9.dp),
             )
         }
     }
@@ -270,14 +278,14 @@ private fun LoginHeader(vm: AppViewModel, backFocus: FocusRequester, onBack: () 
 
 @Composable
 private fun LoginTabs(selected: LoginTab, tabFocus: FocusRequester, onSelect: (LoginTab) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        LoginTab.entries.forEach { item ->
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        LoginTab.entries.forEachIndexed { index, item ->
             val isSelected = item == selected
             TvFocusable(
                 onClick = { onSelect(item) },
-                shape = RoundedCornerShape(12.dp),
-                focusedScale = 1.04f,
-                focusRequester = if (item == LoginTab.Email) tabFocus else null,
+                shape = RoundedCornerShape(10.dp),
+                focusedScale = 1.03f,
+                focusRequester = if (index == 0) tabFocus else null,
             ) { focused ->
                 Column(
                     modifier = Modifier
@@ -287,9 +295,9 @@ private fun LoginTabs(selected: LoginTab, tabFocus: FocusRequester, onSelect: (L
                                 focused -> Palette.SurfaceHigh
                                 else -> Color(0x14FFFFFF)
                             },
-                            RoundedCornerShape(12.dp),
+                            RoundedCornerShape(10.dp),
                         )
-                        .padding(horizontal = 26.dp, vertical = 11.dp),
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
@@ -299,14 +307,14 @@ private fun LoginTabs(selected: LoginTab, tabFocus: FocusRequester, onSelect: (L
                             focused -> Palette.TextPrimary
                             else -> Palette.TextSecondary
                         },
-                        fontSize = 17.sp,
+                        fontSize = 14.sp,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(4.dp))
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .height(3.dp)
+                            .height(2.dp)
                             .background(
                                 if (isSelected) Palette.Accent else Color.Transparent,
                                 RoundedCornerShape(2.dp),
@@ -318,69 +326,250 @@ private fun LoginTabs(selected: LoginTab, tabFocus: FocusRequester, onSelect: (L
     }
 }
 
+// ------------------------------------------------------------------ 扫码登录（主路径）
+
+@Composable
+private fun ScanLoginTab(vm: AppViewModel, actionFocus: FocusRequester) {
+    val state = vm.phoneLogin
+    val url = state.url
+    val statusColor = when {
+        state.finished -> Palette.Success
+        state.error != null -> Palette.Danger
+        state.active -> Palette.Accent
+        else -> Palette.TextTertiary
+    }
+
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
+        Column(
+            Modifier.width(264.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                Modifier
+                    .size(212.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Palette.SurfaceHigh),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (url != null) {
+                    QrCodeImage(content = url, size = 200.dp)
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (state.error == null) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Palette.Accent,
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        Text(
+                            text = if (state.error == null) "正在启动…" else "服务未启动",
+                            color = Palette.TextTertiary,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            if (url != null) {
+                Text(
+                    "配对码 ${pairingCodeOf(url)}",
+                    color = Palette.Accent,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.sp,
+                )
+                Spacer(Modifier.height(4.dp))
+            }
+            Text(
+                "手机与电视需在同一 Wi-Fi",
+                color = Palette.TextTertiary,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+            )
+            if (url != null) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    hostOf(url),
+                    color = Palette.TextTertiary,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+
+        Column(Modifier.weight(1f)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Palette.Surface.copy(alpha = 0.8f))
+                    .padding(horizontal = 13.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(8.dp).background(statusColor, RoundedCornerShape(50)))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = state.status,
+                    color = statusColor,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Text("操作步骤", color = Palette.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(6.dp))
+            StepLine("1", "用手机相机或微信扫描左侧二维码")
+            StepLine("2", "在手机上输入账号密码，或点“Google 登录”")
+            StepLine("3", "电视自动同步登录状态，无需在电视上打字")
+            Spacer(Modifier.height(4.dp))
+
+            val errorText = state.error ?: vm.loginError
+            if (errorText != null) {
+                Text(
+                    errorText,
+                    color = Palette.Danger,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                Text(
+                    "二维码和配对码只在本机有效，登录成功后服务自动关闭。",
+                    color = Palette.TextTertiary,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 2,
+                )
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TvButton(
+                    text = if (state.active) "刷新二维码" else "重试启动",
+                    onClick = {
+                        // 重新扫码必须换一次配对码：先关旧服务，再启动新服务
+                        vm.cancelPhoneLogin()
+                        vm.startPhoneLogin()
+                    },
+                    primary = true,
+                    focusRequester = actionFocus,
+                )
+                if (state.active) {
+                    TvButton("停止服务", onClick = { vm.cancelPhoneLogin() })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepLine(index: String, text: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .size(18.dp)
+                .background(Palette.SurfaceHigh, RoundedCornerShape(50)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(index, color = Palette.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text,
+            color = Palette.TextSecondary,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+    Spacer(Modifier.height(6.dp))
+}
+
 // ------------------------------------------------------------------ 邮箱登录
 
 @Composable
 private fun EmailLoginTab(
+    vm: AppViewModel,
     email: String,
     password: String,
-    loginBusy: Boolean,
     emailFocus: FocusRequester,
     passwordFocus: FocusRequester,
     onEditEmail: () -> Unit,
     onEditPassword: () -> Unit,
-    onSubmit: () -> Unit,
     onClear: () -> Unit,
 ) {
-    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(36.dp)) {
-        Column(Modifier.weight(1.35f)) {
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
+        Column(Modifier.weight(1.25f)) {
             LoginInputField(
                 label = "邮箱",
                 value = email,
-                placeholder = "点击后输入邮箱地址",
+                placeholder = "点击后用屏幕键盘输入邮箱地址",
                 masked = false,
                 focusRequester = emailFocus,
                 onClick = onEditEmail,
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             LoginInputField(
                 label = "密码",
                 value = password,
-                placeholder = "点击后输入密码",
+                placeholder = "点击后用屏幕键盘输入密码",
                 masked = true,
                 focusRequester = passwordFocus,
                 onClick = onEditPassword,
             )
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(10.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 PrimaryAction(
-                    label = if (loginBusy) "登录中…" else "登录",
-                    busy = loginBusy,
-                    enabled = !loginBusy,
-                    onClick = onSubmit,
+                    label = if (vm.loginBusy) "登录中…" else "登录",
+                    busy = vm.loginBusy,
+                    enabled = !vm.loginBusy,
+                    onClick = { vm.loginWithPassword(email, password) },
                 )
                 TvButton("清空", onClear)
+                val error = vm.loginError
+                if (error != null) {
+                    Text(
+                        error,
+                        color = Palette.Danger,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(10.dp))
             Text(
-                "提示：使用电视遥控器或外接键盘输入。密码仅用于向 hanime1.me 提交登录表单，不会保存在本地。",
+                "提示：屏幕键盘已支持大写字母与符号（大写 / ?123），密码以圆点掩码显示；登录成功后自动返回。",
                 color = Palette.TextTertiary,
-                fontSize = 15.sp,
-                lineHeight = 23.sp,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
             )
         }
 
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(0.85f)) {
             InfoCard(
                 title = "邮箱登录",
                 lines = listOf(
                     "选择“邮箱”或“密码”输入框，屏幕键盘会覆盖在页面上方",
+                    "Shift 切换大小写，?123 切到符号键盘",
                     "输入完成后按键盘上的“完成”返回表单",
-                    "确认无误后选择“登录”，等待站点返回结果",
-                    "如果站点触发 Cloudflare 验证，登录可能失败，可改用 Google 或 Cookie 登录",
+                    "若站点触发 Cloudflare 验证，建议改用扫码登录",
                 ),
             )
         }
@@ -396,7 +585,7 @@ private fun LoginInputField(
     focusRequester: FocusRequester,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(12.dp)
     TvFocusable(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -408,10 +597,10 @@ private fun LoginInputField(
             Modifier
                 .fillMaxWidth()
                 .background(if (focused) Palette.SurfaceHigh else Palette.Surface, shape)
-                .padding(horizontal = 20.dp, vertical = 13.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
-            Text(label, color = Palette.TextSecondary, fontSize = 15.sp)
-            Spacer(Modifier.height(5.dp))
+            Text(label, color = Palette.TextSecondary, fontSize = 11.sp)
+            Spacer(Modifier.height(4.dp))
             val shown = when {
                 value.isEmpty() -> placeholder
                 masked -> "●".repeat(value.length.coerceAtMost(16))
@@ -420,7 +609,7 @@ private fun LoginInputField(
             Text(
                 text = shown,
                 color = if (value.isEmpty()) Palette.TextTertiary else Palette.TextPrimary,
-                fontSize = 19.sp,
+                fontSize = 14.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -428,7 +617,104 @@ private fun LoginInputField(
     }
 }
 
-// ------------------------------------------------------------------ Google 登录
+// ------------------------------------------------------------------ Cookie 导入
+
+@Composable
+private fun CookieImportTab(
+    vm: AppViewModel,
+    cookie: String,
+    cookieFocus: FocusRequester,
+    onEdit: () -> Unit,
+    onClear: () -> Unit,
+    onPaste: () -> Unit,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
+        Column(Modifier.weight(1.25f)) {
+            TvFocusable(
+                onClick = onEdit,
+                focusRequester = cookieFocus,
+                shape = shape,
+                focusedScale = 1.01f,
+            ) { focused ->
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 100.dp, max = 140.dp)
+                        .background(if (focused) Palette.SurfaceHigh else Palette.Surface, shape)
+                        .padding(14.dp),
+                ) {
+                    Text("Cookie 内容", color = Palette.TextSecondary, fontSize = 11.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = cookie.ifBlank {
+                            "点击这里用遥控器输入，或先在电脑上复制 Cookie 再点“从剪贴板粘贴”"
+                        },
+                        color = if (cookie.isBlank()) Palette.TextTertiary else Palette.TextPrimary,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        maxLines = 5,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "已输入 ${cookie.length} 个字符",
+                        color = Palette.TextTertiary,
+                        fontSize = 11.sp,
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                PrimaryAction(
+                    label = if (vm.loginBusy) "导入中…" else "导入登录",
+                    busy = vm.loginBusy,
+                    enabled = !vm.loginBusy,
+                    onClick = { vm.loginWithCookieString(normalizeCookieInput(cookie)) },
+                )
+                TvButton("从剪贴板粘贴", onPaste)
+                TvButton("清空", onClear)
+                val error = vm.loginError
+                if (error != null) {
+                    Text(
+                        error,
+                        color = Palette.Danger,
+                        fontSize = 11.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "说明：在电脑浏览器登录 hanime1.me，按 F12 → Network → 任意请求，复制请求头里的 Cookie 值（形如 key=value; key=value），粘贴到这里即可。",
+                color = Palette.TextTertiary,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        Column(Modifier.weight(0.85f)) {
+            InfoCard(
+                title = "Cookie 导入",
+                lines = listOf(
+                    "适合电视上不方便完成 Google 授权的场景",
+                    "Cookie 等同于账号凭证，请勿分享给他人",
+                    "导入后 App 会校验登录态，成功即自动返回",
+                    "提示无效时请重新登录电脑端后复制最新 Cookie",
+                ),
+            )
+        }
+    }
+}
+
+// ------------------------------------------------------------------ Google 登录（TV 内置 WebView）
 
 @Composable
 private fun GoogleLoginTab(vm: AppViewModel) {
@@ -476,16 +762,25 @@ private fun GoogleLoginTab(vm: AppViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
+        Text(
+            "⚠ 电视 WebView 可能被 Google 拒绝，推荐用“扫码登录”在手机上完成 Google 登录。",
+            color = Palette.AccentSoft,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
+            maxLines = 2,
+        )
+        Spacer(Modifier.height(6.dp))
+
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             val status = when {
                 loading -> "正在加载 Google 登录页…"
-                detected -> "检测到已登录，请点击下方按钮完成同步"
-                else -> "请在网页中完成 Google 授权，然后点击“我已完成登录”"
+                detected -> "检测到已登录，请点击“我已完成登录”"
+                else -> "在网页中完成 Google 授权，然后点“我已完成登录”"
             }
             Text(
                 text = status,
                 color = if (!loading && detected) Palette.Success else Palette.TextSecondary,
-                fontSize = 16.sp,
+                fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -494,35 +789,34 @@ private fun GoogleLoginTab(vm: AppViewModel) {
                 Text(
                     text = hostOf(pageUrl),
                     color = Palette.TextTertiary,
-                    fontSize = 15.sp,
+                    fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 280.dp),
+                    modifier = Modifier.widthIn(max = 240.dp),
                 )
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
 
-        // 全宽 WebView：占满本 Tab 的剩余空间（1080p 电视上约 380dp），
-        // 保证屏幕更矮时下方“我已完成登录”等按钮也始终可见（Google 页面本身可滚动）。
+        // weight(1f) 吃掉剩余高度，再兜一个 300dp 上限：矮屏时按钮始终可见
         Box(
             Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .heightIn(max = 420.dp)
-                .clip(RoundedCornerShape(16.dp))
+                .heightIn(max = 300.dp)
+                .clip(RoundedCornerShape(14.dp))
                 .background(Palette.SurfaceHigh),
         ) {
             AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize())
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
 
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             TvButton(
                 text = "进入登录页",
@@ -538,108 +832,18 @@ private fun GoogleLoginTab(vm: AppViewModel) {
                 onClick = { if (!vm.loginBusy) vm.onWebViewLoginFinished(close = true) },
                 primary = detected,
             )
-            TvButton(
-                text = "刷新",
-                onClick = { webView.reload() },
-            )
-            TvButton(
-                text = "打开邮箱登录页",
-                onClick = { webView.loadUrl(EMAIL_LOGIN_URL) },
-            )
+            TvButton(text = "刷新", onClick = { webView.reload() })
+            TvButton(text = "打开邮箱登录页", onClick = { webView.loadUrl(EMAIL_LOGIN_URL) })
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
-            "提示：电视上建议使用外接 USB / 蓝牙键盘完成 Google 授权；如果 Google 以“浏览器不安全”拒绝，请改用邮箱登录或 Cookie 导入。",
+            "若 Google 提示“浏览器不安全”，请改用扫码登录（手机完成 Google 授权）或 Cookie 导入。",
             color = Palette.TextTertiary,
-            fontSize = 15.sp,
-            lineHeight = 22.sp,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
+            maxLines = 2,
         )
-    }
-}
-
-// ------------------------------------------------------------------ Cookie 导入
-
-@Composable
-private fun CookieImportTab(
-    busy: Boolean,
-    cookie: String,
-    cookieFocus: FocusRequester,
-    onEdit: () -> Unit,
-    onSubmit: () -> Unit,
-    onClear: () -> Unit,
-    onPaste: () -> Unit,
-) {
-    val shape = RoundedCornerShape(14.dp)
-    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(36.dp)) {
-        Column(Modifier.weight(1.35f)) {
-            TvFocusable(
-                onClick = onEdit,
-                focusRequester = cookieFocus,
-                shape = shape,
-                focusedScale = 1.01f,
-            ) { focused ->
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 150.dp, max = 210.dp)
-                        .background(if (focused) Palette.SurfaceHigh else Palette.Surface, shape)
-                        .padding(18.dp),
-                ) {
-                    Text("Cookie 内容", color = Palette.TextSecondary, fontSize = 15.sp)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = cookie.ifBlank {
-                            "点击这里用遥控器输入，或先在电脑上复制 Cookie 再点“从剪贴板粘贴”"
-                        },
-                        color = if (cookie.isBlank()) Palette.TextTertiary else Palette.TextPrimary,
-                        fontSize = 15.sp,
-                        lineHeight = 22.sp,
-                        maxLines = 5,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "已输入 ${cookie.length} 个字符",
-                        color = Palette.TextTertiary,
-                        fontSize = 15.sp,
-                    )
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                PrimaryAction(
-                    label = if (busy) "导入中…" else "导入登录",
-                    busy = busy,
-                    enabled = !busy,
-                    onClick = onSubmit,
-                )
-                TvButton("清空", onClear)
-                TvButton("从剪贴板粘贴", onPaste)
-            }
-            Spacer(Modifier.height(16.dp))
-            Text(
-                "说明：在电脑浏览器登录 hanime1.me，打开开发者工具 → Network，选择任意请求，复制请求头里的 Cookie 值（形如 key=value; key=value），粘贴到这里即可。",
-                color = Palette.TextTertiary,
-                fontSize = 15.sp,
-                lineHeight = 23.sp,
-            )
-        }
-
-        Column(Modifier.weight(1f)) {
-            InfoCard(
-                title = "Cookie 导入",
-                lines = listOf(
-                    "适合电视上不方便完成 Google 授权的场景",
-                    "Cookie 等同于账号凭证，请勿分享给他人",
-                    "导入后 App 会校验首页登录态，成功即自动返回",
-                    "如果提示无效，请重新登录电脑端浏览器后复制最新 Cookie",
-                ),
-            )
-        }
     }
 }
 
@@ -664,14 +868,21 @@ private fun KeyboardOverlay(
         runCatching { keyboardFocus.requestFocus() }
     }
 
-    Box(Modifier.fillMaxSize().background(Color(0xE6080910))) {
+    Box(Modifier.fillMaxSize().background(Color(0xF2080910))) {
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(horizontal = 60.dp, vertical = 24.dp),
+                .padding(horizontal = 40.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
-            Text(title, color = Palette.TextSecondary, fontSize = 16.sp)
+            Row(
+                Modifier.fillMaxWidth(0.9f),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(title, color = Palette.TextSecondary, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                TvButton("取消", onCancel)
+            }
             Spacer(Modifier.height(8.dp))
             Text(
                 text = when {
@@ -680,23 +891,23 @@ private fun KeyboardOverlay(
                     else -> value
                 },
                 color = if (value.isEmpty()) Palette.TextTertiary else Palette.TextPrimary,
-                fontSize = 22.sp,
+                fontSize = 15.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
-                    .fillMaxWidth(0.72f)
-                    .background(Palette.Surface, RoundedCornerShape(14.dp))
-                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                    .fillMaxWidth(0.9f)
+                    .background(Palette.Surface, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
             )
             Spacer(Modifier.height(6.dp))
             Text(
                 hint,
                 color = Palette.TextTertiary,
-                fontSize = 15.sp,
+                fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
             TvKeyboard(
                 onKey = onKey,
                 onBackspace = onBackspace,
@@ -704,8 +915,6 @@ private fun KeyboardOverlay(
                 doneLabel = doneLabel,
                 firstFocusRequester = keyboardFocus,
             )
-            Spacer(Modifier.height(14.dp))
-            TvButton("取消", onCancel)
         }
     }
 }
@@ -734,21 +943,21 @@ private fun PrimaryAction(
         Row(
             Modifier
                 .then(backgroundModifier)
-                .padding(horizontal = 34.dp, vertical = 14.dp),
+                .padding(horizontal = 24.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (busy) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(17.dp),
+                    modifier = Modifier.size(15.dp),
                     color = Color.White,
                     strokeWidth = 2.dp,
                 )
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(8.dp))
             }
             Text(
                 label,
                 color = if (enabled) Color.White else Palette.TextSecondary,
-                fontSize = 17.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
             )
         }
@@ -760,20 +969,27 @@ private fun InfoCard(title: String, lines: List<String>, modifier: Modifier = Mo
     Column(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(Palette.Surface.copy(alpha = 0.7f))
-            .padding(22.dp),
+            .padding(16.dp),
     ) {
-        Text(title, color = Palette.TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(12.dp))
+        Text(title, color = Palette.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
         lines.forEach { line ->
-            Text("· $line", color = Palette.TextSecondary, fontSize = 15.sp, lineHeight = 23.sp)
-            Spacer(Modifier.height(8.dp))
+            Text("· $line", color = Palette.TextSecondary, fontSize = 11.sp, lineHeight = 16.sp)
+            Spacer(Modifier.height(6.dp))
         }
     }
 }
 
 // ------------------------------------------------------------------ 工具函数
+
+/** 从配对地址 http://ip:port/?t=XXXXXX 里取出 6 位配对码 */
+private fun pairingCodeOf(url: String?): String {
+    if (url.isNullOrBlank()) return "------"
+    val token = runCatching { Uri.parse(url).getQueryParameter("t") }.getOrNull()
+    return token.orEmpty().ifBlank { "------" }
+}
 
 /** 站点主机判断：hanime1.me 及其子域 */
 private fun isHanimeHost(url: String?): Boolean {

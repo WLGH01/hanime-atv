@@ -1,4 +1,4 @@
-﻿package me.hanime.atv.data
+package me.hanime.atv.data
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
@@ -42,9 +42,18 @@ class HanimeClient(context: Context) {
         }
         .build()
 
-    suspend fun get(path: String, params: Map<String, String> = emptyMap()): String {
-        val url = buildUrl(path, params)
-        return execute(Request.Builder().url(url).get().build())
+    suspend fun get(path: String, params: Map<String, String> = emptyMap()): String =
+        getMulti(path, params.map { it.key to it.value })
+
+    /** 支持同名多值参数（站点的标签筛选是 `?tags[]=` 数组形式） */
+    suspend fun getMulti(path: String, params: List<Pair<String, String>>): String {
+        val builder = if (path.startsWith("http")) {
+            path.toHttpUrl().newBuilder()
+        } else {
+            (BASE_URL + "/" + path.trimStart('/')).toHttpUrl().newBuilder()
+        }
+        params.forEach { (k, v) -> builder.addQueryParameter(k, v) }
+        return execute(Request.Builder().url(builder.build()).get().build())
     }
 
     suspend fun postForm(path: String, fields: Map<String, String>): String {
@@ -69,6 +78,33 @@ class HanimeClient(context: Context) {
         params.forEach { (k, v) -> builder.addQueryParameter(k, v) }
         return builder.build()
     }
+
+    /** 直接下载二进制（GitHub Release 的 APK），回调进度 */
+    suspend fun download(url: String, target: java.io.File, onProgress: (Long, Long) -> Unit): java.io.File =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder().url(url).get().build()
+            val response = httpClient.newCall(request).await()
+            response.use { res ->
+                if (!res.isSuccessful) throw HttpError(res.code, null, "")
+                val body = res.body ?: throw IOException("empty body")
+                val total = body.contentLength()
+                target.parentFile?.mkdirs()
+                body.byteStream().use { input ->
+                    target.outputStream().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        var written = 0L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            output.write(buffer, 0, read)
+                            written += read
+                            onProgress(written, if (total > 0) total else written)
+                        }
+                    }
+                }
+            }
+            target
+        }
 
     private suspend fun execute(request: Request): String = withContext(Dispatchers.IO) {
         val call = httpClient.newCall(request)

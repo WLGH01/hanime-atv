@@ -1,7 +1,8 @@
-﻿package me.hanime.atv.ui.components
+package me.hanime.atv.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,23 +10,53 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.hanime.atv.ui.theme.Palette
 
+// 960dp 逻辑宽度下最多 10 键一行：10*44 + 9*6 = 494dp，远小于屏幕宽度
+private val KeyWidth = 44.dp
+private val KeyHeight = 40.dp
+private val KeyGap = 6.dp
+private val KeyShape = RoundedCornerShape(8.dp)
+
+private val letterRows = listOf(
+    listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
+    listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
+    listOf("a", "s", "d", "f", "g", "h", "j", "k", "l", "@"),
+    listOf("z", "x", "c", "v", "b", "n", "m", ".", "-", "_"),
+)
+
+// 覆盖常用英文标点：密码、邮箱、Cookie 都会用到
+private val symbolRows = listOf(
+    listOf("!", "@", "#", "$", "%", "^", "&", "*", "(", ")"),
+    listOf("[", "]", "{", "}", "-", "_", "=", "+", "~", "`"),
+    listOf(";", ":", "'", "\"", ",", ".", "/", "\\", "|", "?"),
+)
+
 /**
  * 电视遥控器可用的屏幕键盘。TV 上没有实体键盘，搜索/登录都靠它输入。
+ *
+ * 增强点（向后兼容，SearchScreen 调用方式不变）：
+ * - 大写切换：Shift 键把字母键显示并输入为大写；
+ * - 符号页：`?123` / `ABC` 切换数字符号键盘，覆盖英文密码常用符号；
+ * - 键位固定 44×40dp，10 键一行，960dp 宽度内排布安全。
  */
 @Composable
 fun TvKeyboard(
@@ -35,37 +66,54 @@ fun TvKeyboard(
     modifier: Modifier = Modifier,
     doneLabel: String = "完成",
     firstFocusRequester: FocusRequester? = null,
+    initialUppercase: Boolean = false,
 ) {
-    val rows = remember {
-        listOf(
-            listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
-            listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
-            listOf("a", "s", "d", "f", "g", "h", "j", "k", "l", "@"),
-            listOf("z", "x", "c", "v", "b", "n", "m", ".", "-", "_"),
-        )
-    }
+    var uppercase by remember { mutableStateOf(initialUppercase) }
+    var symbolPage by remember { mutableStateOf(false) }
+    val rows = if (symbolPage) symbolRows else letterRows
+
     Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.widthIn(max = 720.dp),
+        verticalArrangement = Arrangement.spacedBy(KeyGap),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         rows.forEachIndexed { rowIndex, row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
                 row.forEachIndexed { colIndex, key ->
+                    val isLetter = !symbolPage && key.length == 1 && key[0].isLetter()
                     KeyButton(
-                        label = key,
-                        width = 52.dp,
-                        height = 46.dp,
+                        label = if (isLetter && uppercase) key.uppercase() else key,
+                        width = KeyWidth,
+                        height = KeyHeight,
                         focusRequester = if (rowIndex == 0 && colIndex == 0) firstFocusRequester else null,
-                        onClick = { onKey(key) },
+                        onClick = {
+                            onKey(if (isLetter && uppercase) key.uppercase() else key)
+                        },
                     )
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            KeyButton(label = "空格", width = 170.dp, height = 46.dp, onClick = { onKey(" ") })
-            KeyButton(label = "删除", width = 110.dp, height = 46.dp, onClick = onBackspace)
-            KeyButton(label = doneLabel, width = 150.dp, height = 46.dp, primary = true, onClick = onDone)
+
+        if (symbolPage) {
+            Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
+                KeyButton(label = "ABC", width = 74.dp, height = KeyHeight, onClick = { symbolPage = false })
+                KeyButton(label = "空格", width = 150.dp, height = KeyHeight, onClick = { onKey(" ") })
+                KeyButton(label = "删除", width = 74.dp, height = KeyHeight, onClick = onBackspace)
+                KeyButton(label = doneLabel, width = 96.dp, height = KeyHeight, primary = true, onClick = onDone)
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
+                KeyButton(
+                    label = if (uppercase) "小写" else "大写",
+                    width = 66.dp,
+                    height = KeyHeight,
+                    onClick = { uppercase = !uppercase },
+                )
+                KeyButton(label = "空格", width = 150.dp, height = KeyHeight, onClick = { onKey(" ") })
+                KeyButton(label = "删除", width = 74.dp, height = KeyHeight, onClick = onBackspace)
+                KeyButton(label = "?123", width = 74.dp, height = KeyHeight, onClick = { symbolPage = true })
+                KeyButton(label = doneLabel, width = 96.dp, height = KeyHeight, primary = true, onClick = onDone)
+            }
         }
     }
 }
@@ -73,8 +121,8 @@ fun TvKeyboard(
 @Composable
 private fun KeyButton(
     label: String,
-    width: androidx.compose.ui.unit.Dp,
-    height: androidx.compose.ui.unit.Dp,
+    width: Dp,
+    height: Dp,
     onClick: () -> Unit,
     primary: Boolean = false,
     focusRequester: FocusRequester? = null,
@@ -82,23 +130,28 @@ private fun KeyButton(
     TvFocusable(
         onClick = onClick,
         modifier = Modifier.width(width).height(height),
-        shape = RoundedCornerShape(10.dp),
-        focusedScale = 1.12f,
+        shape = KeyShape,
+        focusedScale = 1.06f,
         focusRequester = focusRequester,
     ) { _ ->
         val bg = if (primary) {
-            Modifier.background(Palette.accentGradient, RoundedCornerShape(10.dp))
+            Modifier.background(Palette.accentGradient, KeyShape)
         } else {
-            Modifier.background(Palette.Surface, RoundedCornerShape(10.dp))
+            Modifier.background(Palette.Surface, KeyShape)
         }
-        androidx.compose.foundation.layout.Box(
+        Box(
             Modifier
                 .fillMaxWidth()
                 .height(height)
                 .then(bg),
             contentAlignment = Alignment.Center,
         ) {
-            Text(label, color = Color.White, fontSize = if (label.length > 1) 12.sp else 15.sp)
+            Text(
+                text = label,
+                color = if (primary) Color.White else Palette.TextPrimary,
+                fontSize = if (label.length > 1) 12.sp else 13.sp,
+                maxLines = 1,
+            )
         }
     }
 }
@@ -140,4 +193,3 @@ fun TvSearchBox(
         }
     }
 }
-

@@ -1,4 +1,4 @@
-﻿package me.hanime.atv.ui
+package me.hanime.atv.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,13 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,20 +24,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
+import me.hanime.atv.R
 import me.hanime.atv.ui.components.TvFocusable
+import me.hanime.atv.ui.components.UpdateHost
 import me.hanime.atv.ui.screen.DetailScreen
+import me.hanime.atv.ui.screen.DiscoverScreen
 import me.hanime.atv.ui.screen.FavoritesScreen
 import me.hanime.atv.ui.screen.HistoryScreen
 import me.hanime.atv.ui.screen.HomeScreen
@@ -59,6 +55,7 @@ import me.hanime.atv.ui.theme.Palette
 fun AppRoot(vm: AppViewModel = viewModel()) {
     LaunchedEffect(Unit) {
         if (vm.homeState is Loadable.Idle) vm.loadHome()
+        vm.maybeAutoCheckUpdate()
     }
 
     val current = vm.screen
@@ -88,13 +85,14 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                     ),
                 ),
         )
-        Row(Modifier.fillMaxSize()) {
+        androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
             if (chromeVisible) {
                 NavRail(vm, current, railFocus)
             }
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 when (current) {
                     Screen.Home -> HomeScreen(vm, Modifier.fillMaxSize())
+                    Screen.Discover -> DiscoverScreen(vm, Modifier.fillMaxSize())
                     Screen.Search -> SearchScreen(vm, Modifier.fillMaxSize())
                     Screen.Favorites -> FavoritesScreen(vm, Modifier.fillMaxSize())
                     Screen.History -> HistoryScreen(vm, Modifier.fillMaxSize())
@@ -106,39 +104,41 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
             }
         }
         ToastHost(vm)
+        UpdateHost(vm)
     }
 }
 
-private data class NavItem(val screen: Screen, val label: String, val icon: ImageVector)
+private data class NavItem(
+    val screen: Screen,
+    val label: String,
+    val iconRes: Int,
+)
 
 private val navItems = listOf(
-    NavItem(Screen.Home, "首页", Icons.Filled.Home),
-    NavItem(Screen.Search, "搜索", Icons.Filled.Search),
-    NavItem(Screen.Favorites, "收藏", Icons.Filled.Star),
-    NavItem(Screen.History, "历史", Icons.Filled.List),
-    NavItem(Screen.Settings, "设置", Icons.Filled.Settings),
+    NavItem(Screen.Home, "首页", R.drawable.ic_nav_home),
+    NavItem(Screen.Discover, "分类", R.drawable.ic_nav_discover),
+    NavItem(Screen.Search, "搜索", R.drawable.ic_nav_search),
+    NavItem(Screen.Favorites, "收藏", R.drawable.ic_nav_favorite),
+    NavItem(Screen.History, "历史", R.drawable.ic_nav_history),
+    NavItem(Screen.Settings, "设置", R.drawable.ic_nav_settings),
 )
 
 @Composable
 private fun NavRail(vm: AppViewModel, current: Screen, firstItemFocus: FocusRequester) {
     Column(
         modifier = Modifier
-            .width(96.dp)
+            .width(84.dp)
             .fillMaxHeight()
             .background(Color(0x66000000))
-            .padding(vertical = 28.dp),
+            .padding(vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            "H",
-            color = Palette.Accent,
-            fontSize = 30.sp,
-            fontWeight = FontWeight.Black,
-            modifier = Modifier.padding(bottom = 22.dp),
-        )
+        LogoMark()
+        Spacer(Modifier.height(16.dp))
         navItems.forEachIndexed { index, item ->
-            val selected = current == item.screen || (current is Screen.Detail && item.screen == Screen.Home)
+            val selected = current == item.screen ||
+                (current is Screen.Detail && item.screen == Screen.Home)
             NavRailButton(
                 item = item,
                 selected = selected,
@@ -154,12 +154,36 @@ private fun NavRail(vm: AppViewModel, current: Screen, firstItemFocus: FocusRequ
         }
         Spacer(Modifier.weight(1f))
         NavRailButton(
-            item = NavItem(Screen.Login, if (vm.isLoggedIn) "账号" else "登录", Icons.Filled.Person),
+            item = NavItem(
+                screen = Screen.Login,
+                label = if (vm.isLoggedIn) "账号" else "登录",
+                iconRes = R.drawable.ic_nav_account,
+            ),
             selected = current == Screen.Login,
             onClick = { if (vm.isLoggedIn) vm.navigateToTopLevel(Screen.Settings) else vm.openLogin() },
             showDot = vm.isLoggedIn,
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun LogoMark() {
+    Box(
+        Modifier
+            .size(42.dp)
+            .background(
+                Brush.linearGradient(listOf(Palette.Accent, Palette.Violet)),
+                RoundedCornerShape(13.dp),
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            "H",
+            color = Color.White,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Black,
+        )
     }
 }
 
@@ -174,9 +198,9 @@ private fun NavRailButton(
     TvFocusable(
         onClick = onClick,
         focusRequester = focusRequester,
-        shape = RoundedCornerShape(18.dp),
-        focusedScale = 1.04f,
-        modifier = Modifier.width(76.dp),
+        shape = RoundedCornerShape(16.dp),
+        focusedScale = 1.03f,
+        modifier = Modifier.width(68.dp),
     ) { focused ->
         Column(
             modifier = Modifier
@@ -187,31 +211,31 @@ private fun NavRailButton(
                         focused -> Palette.SurfaceHigh
                         else -> Color.Transparent
                     },
-                    RoundedCornerShape(18.dp),
+                    RoundedCornerShape(16.dp),
                 )
-                .padding(vertical = 12.dp),
+                .padding(vertical = 9.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box {
                 Icon(
-                    imageVector = item.icon,
+                    imageVector = ImageVector.vectorResource(item.iconRes),
                     contentDescription = item.label,
                     tint = if (selected || focused) Palette.Accent else Palette.TextSecondary,
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(22.dp),
                 )
                 if (showDot) {
                     Box(
                         Modifier
                             .align(Alignment.TopEnd)
-                            .size(7.dp)
+                            .size(6.dp)
                             .background(Palette.Success, RoundedCornerShape(50)),
                     )
                 }
             }
-            Spacer(Modifier.height(5.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
                 item.label,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 color = if (selected || focused) Palette.TextPrimary else Palette.TextTertiary,
             )
         }
@@ -233,22 +257,19 @@ private fun androidx.compose.foundation.layout.BoxScope.ToastHost(vm: AppViewMod
         exit = fadeOut(),
         modifier = Modifier
             .align(Alignment.BottomCenter)
-            .padding(bottom = 40.dp),
+            .padding(bottom = 28.dp),
     ) {
         Surface(
             color = Palette.SurfaceHigh.copy(alpha = 0.96f),
             shape = RoundedCornerShape(999.dp),
-            shadowElevation = 12.dp,
+            shadowElevation = 10.dp,
         ) {
             Text(
                 message.orEmpty(),
                 color = Palette.TextPrimary,
-                fontSize = 15.sp,
-                modifier = Modifier.padding(horizontal = 26.dp, vertical = 12.dp),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
             )
         }
     }
 }
-
-
-
