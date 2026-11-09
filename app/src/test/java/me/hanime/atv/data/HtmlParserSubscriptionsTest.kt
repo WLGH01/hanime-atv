@@ -19,12 +19,12 @@ class HtmlParserSubscriptionsTest {
         val page = HtmlParser.parseSubscriptions(fixture("subscriptions_fixture.html"), 1)
 
         assertFalse("登录页才能判定为未登录", page.needsLogin)
-        assertEquals(listOf("作者 A", "作者 B", "作者 C"), page.artists.map { it.name })
+        assertEquals(listOf("作者 A", "作者 B"), page.artists.map { it.name })
         assertEquals("3 部影片", page.artists[0].countText)
         assertEquals(
             "作者卡背景图必须跳过，取真正的头像",
             "https://vdownload.hembed.com/image/avatar/author_a.png?secure=av,1",
-            page.artists[2].avatar,
+            page.artists[0].avatar,
         )
         assertEquals(listOf("400001", "400002"), page.items.map { it.code })
         assertEquals("订阅作者 A 的新作品", page.items[0].title)

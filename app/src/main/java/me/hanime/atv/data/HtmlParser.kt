@@ -198,15 +198,29 @@ object HtmlParser {
             return SubscriptionsPage(page = page, needsLogin = true)
         }
 
-        val artists = body.select(".subscriptions-artist-card, .artist-option, .search-artist-card")
+        // 真实页面结构：`.subscriptions-nav` 里是 `.subscriptions-artist-card`，
+        // 标题在 `.card-mobile-title`；其它版本的作者卡类名做兜底。
+        val scopedArtists = body.select(".subscriptions-nav .subscriptions-artist-card")
+        val artistElements = if (scopedArtists.isNotEmpty()) {
+            scopedArtists
+        } else {
+            body.select(".subscriptions-artist-card, .artist-option, .search-artist-card")
+        }
+        val artists = artistElements
             .mapNotNull { it.toSubscriptionArtist() }
             .distinctBy { it.name }
 
-        var items = body.select(".video-item-container").mapNotNull { it.toCard() }
+        // 作者作品在 `.content-padding-new` 内容区里；页面没有该容器时退回整页
+        val content: Element = body.selectFirst(".content-padding-new") ?: body
+        var items = content.select(".video-item-container").mapNotNull { it.toCard() }
         if (items.isEmpty()) {
             // 订阅页也可能用分类页那套网格卡片（div.search-videos / .home-rows-videos-div）
-            items = body.select("div.search-videos, .home-rows-videos-div")
+            items = (if (content !== body) content else body)
+                .select("div.search-videos, .home-rows-videos-div")
                 .mapNotNull { it.toSearchGridCard() }
+        }
+        if (items.isEmpty() && content !== body) {
+            items = body.select(".video-item-container").mapNotNull { it.toCard() }
         }
 
         return SubscriptionsPage(
@@ -220,16 +234,19 @@ object HtmlParser {
     private fun Element.toSubscriptionArtist(): SubscriptionArtist? {
         val name = (
             takeIf { hasClass("search-artist-title") || hasClass("card-mobile-title") }?.text()
-                ?: selectFirst(".search-artist-title")?.text()
                 ?: selectFirst(".card-mobile-title")?.text()
+                ?: selectFirst(".search-artist-title")?.text()
                 ?: return null
             ).trim()
         if (name.isBlank()) return null
 
-        // 作者卡的背景图固定是 card_artist_background.jpg，跳过它取真正的头像
-        val avatar = select("img")
-            .mapNotNull { img -> img.absUrl("src").ifBlank { img.attr("src") }.ifBlank { null } }
-            .firstOrNull { !it.contains("card_artist_background") }
+        // 作者卡的背景图固定是 card_artist_background.jpg，跳过它取真正的头像；
+        // 站点作者卡通常是 [背景图, 头像] 两张 img，第二张就是头像。
+        val images = select("img").mapNotNull { img ->
+            img.absUrl("src").ifBlank { img.attr("src") }.ifBlank { null }
+        }
+        val avatar = images.firstOrNull { !it.contains("card_artist_background") }
+            ?: images.getOrNull(1)
         val count = selectFirst(".search-artist-count")?.text()?.trim()?.ifBlank { null }
         return SubscriptionArtist(name = name, avatar = avatar, countText = count)
     }

@@ -2,58 +2,56 @@
 <html>
 <head><meta charset="utf-8"><title>訂閱內容 - hanime1.me</title></head>
 <body>
-<div id="subscriptions-nav-desktop" class="subscriptions-nav">
-    <div class="artist-option subscriptions-active-artist">
-        <img src="https://vdownload.hembed.com/image/icon/user_default_image.jpg?secure=x,1">
-        <div class="search-artist-title">作者 A</div>
-        <div class="search-artist-count">3 部影片</div>
+<!-- 真实页面：作者列表在 .subscriptions-nav 里，卡片是 .subscriptions-artist-card，
+     标题在 .card-mobile-title，img 依次是背景图与头像 -->
+<div class="subscriptions-nav no-scrollbar-style">
+    <div class="subscriptions-artist-card subscriptions-active-artist">
+        <div style="position: relative;">
+            <img src="https://vdownload.hembed.com/image/icon/card_artist_background.jpg?secure=bg,1">
+            <img src="https://vdownload.hembed.com/image/avatar/author_a.png?secure=av,1">
+        </div>
+        <div class="card-mobile-details-wrapper">
+            <div class="card-mobile-title">作者 A</div>
+            <div class="card-mobile-genre-wrapper"><span class="search-artist-count">3 部影片</span></div>
+        </div>
     </div>
-    <div class="artist-option">
-        <img src="https://vdownload.hembed.com/image/icon/user_default_image.jpg?secure=x,2">
-        <div class="search-artist-title">作者 B</div>
-        <div class="search-artist-count">1 部影片</div>
-    </div>
-</div>
-
-<div class="row no-gutter">
-    <div class="col-xs-6 col-sm-4 search-artist-card hover-lighter multiple-link-wrapper home-artist-card">
-        <a class="overlay" href="https://hanime1.me/search?query=%E4%BD%9C%E8%80%85%20A&genre="></a>
-        <div class="card-mobile-panel inner">
-            <div style="position: relative;">
-                <img style="width: 100%;" src="https://vdownload.hembed.com/image/icon/card_artist_background.jpg?secure=bg,1">
-                <img style="position: absolute; top: 0; left: 0;" src="https://vdownload.hembed.com/image/avatar/author_a.png?secure=av,1">
-            </div>
-            <div class="card-mobile-details-wrapper">
-                <div class="card-mobile-title search-artist-title">作者 C</div>
-                <div class="card-mobile-genre-wrapper">
-                    <span class="card-mobile-user search-artist-count">12 部影片</span>
-                </div>
-            </div>
+    <div class="subscriptions-artist-card">
+        <div style="position: relative;">
+            <img src="https://vdownload.hembed.com/image/icon/card_artist_background.jpg?secure=bg,2">
+            <img src="https://vdownload.hembed.com/image/avatar/author_b.png?secure=av,2">
+        </div>
+        <div class="card-mobile-details-wrapper">
+            <div class="card-mobile-title">作者 B</div>
+            <div class="card-mobile-genre-wrapper"><span class="search-artist-count">1 部影片</span></div>
         </div>
     </div>
 </div>
 
-<div class="video-item-container" title="订阅作者 A 的新作品">
-    <div class="horizontal-card">
-        <a href="https://hanime1.me/watch?v=400001" class="video-link">
-            <div class="thumb-container">
-                <img class="main-thumb" src="https://vdownload.hembed.com/image/thumbnail/400001l.jpg?secure=v1,1">
-                <div class="duration">24:00</div>
-            </div>
-            <div class="title">订阅作者 A 的新作品</div>
-        </a>
+<div class="content-padding-new">
+    <div class="video-item-container no-select" title="订阅作者 A 的新作品">
+        <div class="horizontal-card">
+            <a href="https://hanime1.me/watch?v=400001" class="video-link">
+                <div class="thumb-container">
+                    <img class="main-thumb" src="https://vdownload.hembed.com/image/thumbnail/400001l.jpg?secure=v1,1">
+                    <div class="duration">24:00</div>
+                </div>
+                <div class="title">订阅作者 A 的新作品</div>
+            </a>
+            <div class="subtitle"><a href="https://hanime1.me/user/11">作者 A</a></div>
+        </div>
     </div>
-</div>
 
-<div class="video-item-container">
-    <div class="horizontal-card">
-        <a href="https://hanime1.me/watch?v=400002" class="video-link">
-            <div class="thumb-container">
-                <img class="main-thumb" src="https://vdownload.hembed.com/image/thumbnail/400002l.jpg?secure=v2,2">
-                <div class="duration">12:34</div>
-            </div>
-            <div class="title">订阅作者 B 的新作品</div>
-        </a>
+    <div class="video-item-container no-select" title="订阅作者 B 的新作品">
+        <div class="horizontal-card">
+            <a href="https://hanime1.me/watch?v=400002" class="video-link">
+                <div class="thumb-container">
+                    <img class="main-thumb" src="https://vdownload.hembed.com/image/thumbnail/400002l.jpg?secure=v2,2">
+                    <div class="duration">12:34</div>
+                </div>
+                <div class="title">订阅作者 B 的新作品</div>
+            </a>
+            <div class="subtitle"><a href="https://hanime1.me/user/12">作者 B</a></div>
+        </div>
     </div>
 </div>
 
