@@ -26,6 +26,7 @@ import me.hanime.atv.data.PhoneLoginState
 import me.hanime.atv.data.SearchFilter
 import me.hanime.atv.data.SearchPage
 import me.hanime.atv.data.SortOption
+import me.hanime.atv.data.SubscriptionsPage
 import me.hanime.atv.data.UpdateChecker
 import me.hanime.atv.data.UpdateInfo
 import me.hanime.atv.data.UpdateState
@@ -45,6 +46,7 @@ sealed interface Screen {
     data object History : Screen
     data object Settings : Screen
     data object Login : Screen
+    data object Subscriptions : Screen
     data class Detail(val code: String) : Screen
     data class Player(val code: String) : Screen
 }
@@ -347,7 +349,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val isLoggedIn: Boolean get() = user != null
 
-    fun openLogin() {
+    /** 登录成功后要自动跳转的页面（例如在导航栏点「订阅」时被要求登录） */
+    private var pendingScreenAfterLogin: Screen? = null
+
+    fun openLogin(afterLogin: Screen? = null) {
+        pendingScreenAfterLogin = afterLogin
         loginError = null
         navigate(Screen.Login)
     }
@@ -369,6 +375,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (target is Screen.Login) goBack()
         }
         favoritesState = Loadable.Idle
+        subscriptionsState = Loadable.Idle
+        // 用户是从「收藏 / 订阅」入口被要求登录的，登录完成后直接送过去
+        val after = pendingScreenAfterLogin
+        pendingScreenAfterLogin = null
+        if (after != null && screen != after) navigateToTopLevel(after)
     }
 
     fun loginWithPassword(email: String, password: String) {
@@ -433,6 +444,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             user = null
             favorites = emptyList()
             favoritesState = Loadable.Idle
+            subscriptionsState = Loadable.Idle
             showToast("已退出登录")
         }
     }
@@ -587,6 +599,60 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     favorites = (favorites + it.items).distinctBy { c -> c.code }
                     favoritesState = Loadable.Success(it.copy(items = favorites))
                 }
+        }
+    }
+
+    // ------------------------------------------------------------ 订阅作者
+
+    var subscriptionsState by mutableStateOf<Loadable<SubscriptionsPage>>(Loadable.Idle)
+        private set
+    var subscriptionsLoadingMore by mutableStateOf(false)
+        private set
+    private var subscriptionsPage = 0
+
+    /** 拉取站点 `/subscriptions`：已订阅作者 + 他们的最新作品 */
+    fun loadSubscriptions(force: Boolean = false) {
+        if (!isLoggedIn) {
+            subscriptionsState = Loadable.Failure("登录后可查看订阅作者的作品")
+            return
+        }
+        if (!force && subscriptionsState is Loadable.Loading) return
+        if (!force && subscriptionsState is Loadable.Success) return
+        subscriptionsState = Loadable.Loading
+        viewModelScope.launch {
+            runCatching { repository.loadSubscriptions(1) }
+                .onSuccess { page ->
+                    if (page.needsLogin) {
+                        // 本地还有用户缓存，但站点会话已过期
+                        subscriptionsState = Loadable.Failure("登录状态已失效，请在「登录」页重新登录")
+                    } else {
+                        subscriptionsPage = 1
+                        subscriptionsState = Loadable.Success(page)
+                    }
+                }
+                .onFailure { subscriptionsState = Loadable.Failure(it.toUserMessage()) }
+        }
+    }
+
+    fun subscriptionsMore() {
+        val data = (subscriptionsState as? Loadable.Success)?.data ?: return
+        if (!data.hasNext || subscriptionsLoadingMore) return
+        subscriptionsLoadingMore = true
+        viewModelScope.launch {
+            val next = subscriptionsPage + 1
+            runCatching { repository.loadSubscriptions(next) }
+                .onSuccess { page ->
+                    subscriptionsPage = next
+                    subscriptionsState = Loadable.Success(
+                        page.copy(
+                            // 作者列表只在第一页给出，加载更多时保留
+                            artists = if (page.artists.isNotEmpty()) page.artists else data.artists,
+                            items = (data.items + page.items).distinctBy { it.code },
+                        ),
+                    )
+                }
+                .onFailure { showToast(it.toUserMessage()) }
+            subscriptionsLoadingMore = false
         }
     }
 

@@ -49,6 +49,7 @@ import me.hanime.atv.ui.screen.LoginScreen
 import me.hanime.atv.ui.screen.PlayerScreen
 import me.hanime.atv.ui.screen.SearchScreen
 import me.hanime.atv.ui.screen.SettingsScreen
+import me.hanime.atv.ui.screen.SubscriptionsScreen
 import me.hanime.atv.ui.theme.Palette
 
 @Composable
@@ -96,6 +97,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                     Screen.Search -> SearchScreen(vm, Modifier.fillMaxSize())
                     Screen.Favorites -> FavoritesScreen(vm, Modifier.fillMaxSize())
                     Screen.History -> HistoryScreen(vm, Modifier.fillMaxSize())
+                    Screen.Subscriptions -> SubscriptionsScreen(vm, Modifier.fillMaxSize())
                     Screen.Settings -> SettingsScreen(vm, Modifier.fillMaxSize())
                     Screen.Login -> LoginScreen(vm, Modifier.fillMaxSize())
                     is Screen.Detail -> DetailScreen(vm, current.code, Modifier.fillMaxSize())
@@ -118,6 +120,7 @@ private val navItems = listOf(
     NavItem(Screen.Home, "首页", R.drawable.ic_nav_home),
     NavItem(Screen.Discover, "分类", R.drawable.ic_nav_discover),
     NavItem(Screen.Search, "搜索", R.drawable.ic_nav_search),
+    NavItem(Screen.Subscriptions, "订阅", R.drawable.ic_nav_subscriptions),
     NavItem(Screen.Favorites, "收藏", R.drawable.ic_nav_favorite),
     NavItem(Screen.History, "历史", R.drawable.ic_nav_history),
     NavItem(Screen.Settings, "设置", R.drawable.ic_nav_settings),
@@ -130,12 +133,12 @@ private fun NavRail(vm: AppViewModel, current: Screen, firstItemFocus: FocusRequ
             .width(84.dp)
             .fillMaxHeight()
             .background(Color(0x66000000))
-            .padding(vertical = 20.dp),
+            .padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         LogoMark()
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
         navItems.forEachIndexed { index, item ->
             val selected = current == item.screen ||
                 (current is Screen.Detail && item.screen == Screen.Home)
@@ -144,8 +147,10 @@ private fun NavRail(vm: AppViewModel, current: Screen, firstItemFocus: FocusRequ
                 selected = selected,
                 focusRequester = if (index == 0) firstItemFocus else null,
                 onClick = {
-                    if (item.screen == Screen.Favorites && !vm.isLoggedIn) {
-                        vm.openLogin()
+                    // 收藏 / 订阅需要站点账号：未登录时直接进登录页，登录后自动跳回目标页
+                    val needsLogin = item.screen == Screen.Favorites || item.screen == Screen.Subscriptions
+                    if (needsLogin && !vm.isLoggedIn) {
+                        vm.openLogin(item.screen)
                     } else {
                         vm.navigateToTopLevel(item.screen)
                     }
@@ -163,7 +168,7 @@ private fun NavRail(vm: AppViewModel, current: Screen, firstItemFocus: FocusRequ
             onClick = { if (vm.isLoggedIn) vm.navigateToTopLevel(Screen.Settings) else vm.openLogin() },
             showDot = vm.isLoggedIn,
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(2.dp))
     }
 }
 
@@ -213,7 +218,7 @@ private fun NavRailButton(
                     },
                     RoundedCornerShape(16.dp),
                 )
-                .padding(vertical = 9.dp),
+                .padding(vertical = 5.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box {

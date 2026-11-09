@@ -183,6 +183,57 @@ object HtmlParser {
         return FavoritePage(items = items.distinctBy { it.code }, page = page, hasNext = hasNextPage(body, page))
     }
 
+    // ---------------------------------------------------------------- 订阅作者
+
+    /**
+     * 站点 `/subscriptions`（登录后可见）：
+     * - 顶部/侧栏是已订阅作者，条目带 `.search-artist-title`（部分页面是 `.artist-option`）；
+     * - 下面是这些作者的最新作品，卡片结构与首页/搜索一致（`.video-item-container`，
+     *   极少数布局会退回 `div.search-videos` 网格卡片）。
+     * 未登录时站点 302 到 `/login`，这里的登录表单可作为会话失效的判据。
+     */
+    fun parseSubscriptions(html: String, page: Int): SubscriptionsPage {
+        val body = doc(html).body()
+        if (body.selectFirst("form[action*=/login]") != null) {
+            return SubscriptionsPage(page = page, needsLogin = true)
+        }
+
+        val artists = body.select(".subscriptions-artist-card, .artist-option, .search-artist-card")
+            .mapNotNull { it.toSubscriptionArtist() }
+            .distinctBy { it.name }
+
+        var items = body.select(".video-item-container").mapNotNull { it.toCard() }
+        if (items.isEmpty()) {
+            // 订阅页也可能用分类页那套网格卡片（div.search-videos / .home-rows-videos-div）
+            items = body.select("div.search-videos, .home-rows-videos-div")
+                .mapNotNull { it.toSearchGridCard() }
+        }
+
+        return SubscriptionsPage(
+            artists = artists,
+            items = items.distinctBy { it.code },
+            page = page,
+            hasNext = hasNextPage(body, page),
+        )
+    }
+
+    private fun Element.toSubscriptionArtist(): SubscriptionArtist? {
+        val name = (
+            takeIf { hasClass("search-artist-title") || hasClass("card-mobile-title") }?.text()
+                ?: selectFirst(".search-artist-title")?.text()
+                ?: selectFirst(".card-mobile-title")?.text()
+                ?: return null
+            ).trim()
+        if (name.isBlank()) return null
+
+        // 作者卡的背景图固定是 card_artist_background.jpg，跳过它取真正的头像
+        val avatar = select("img")
+            .mapNotNull { img -> img.absUrl("src").ifBlank { img.attr("src") }.ifBlank { null } }
+            .firstOrNull { !it.contains("card_artist_background") }
+        val count = selectFirst(".search-artist-count")?.text()?.trim()?.ifBlank { null }
+        return SubscriptionArtist(name = name, avatar = avatar, countText = count)
+    }
+
     /** 分页链接里是否还有比当前页更大的页码（兼容 laravel 的 ?page=N 结构） */
     private fun hasNextPage(body: Element, page: Int): Boolean {
         if (body.select("a[rel=next]").isNotEmpty()) return true

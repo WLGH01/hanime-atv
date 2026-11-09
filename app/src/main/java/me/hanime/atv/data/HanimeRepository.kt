@@ -36,6 +36,13 @@ class HanimeRepository(private val client: HanimeClient, private val store: Loca
     suspend fun loadWatchLater(userId: String, page: Int): FavoritePage =
         HtmlParser.parseCardList(client.get("/user/$userId/saves", mapOf("page" to page.toString())), page)
 
+    /** 已订阅作者 + 他们的最新作品（站点 `/subscriptions`，需登录） */
+    suspend fun loadSubscriptions(page: Int): SubscriptionsPage =
+        HtmlParser.parseSubscriptions(
+            client.get("/subscriptions", mapOf("page" to page.toString())),
+            page,
+        )
+
     /** 把 WebView 里的 cookie 同步到 OkHttp，完成登录态迁移 */
     fun importWebViewCookies(): Boolean {
         val raw = CookieManager.getInstance().getCookie(HanimeClient.BASE_URL) ?: return false

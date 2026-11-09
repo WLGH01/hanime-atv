@@ -184,6 +184,26 @@ data class FavoritePage(
     val hasNext: Boolean,
 )
 
+// ---------------------------------------------------------------- 订阅作者
+
+/** 站点 `/subscriptions` 页顶部列出的已订阅作者 */
+data class SubscriptionArtist(
+    val name: String,
+    val avatar: String? = null,
+    /** 站点给出的统计文字，例如 “12 部影片” */
+    val countText: String? = null,
+)
+
+/** 订阅页：作者列表 + 他们的最新作品（分页） */
+data class SubscriptionsPage(
+    val artists: List<SubscriptionArtist> = emptyList(),
+    val items: List<HanimeCard> = emptyList(),
+    val page: Int = 1,
+    val hasNext: Boolean = false,
+    /** 会话失效时站点会重定向到登录页，界面据此提示重新登录 */
+    val needsLogin: Boolean = false,
+)
+
 // ---------------------------------------------------------------- 登录 / 更新
 
 sealed interface LoginResult {
