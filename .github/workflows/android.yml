@@ -57,6 +57,9 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace --no-daemon
+
       - name: Build APKs
         run: |
           ./gradlew assembleDebug assembleRelease --stacktrace --no-daemon \

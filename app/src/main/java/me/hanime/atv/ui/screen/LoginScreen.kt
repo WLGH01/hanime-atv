@@ -58,7 +58,6 @@ import me.hanime.atv.ui.theme.Palette
 // 主路径是"手机扫码"：电视只负责显示二维码，账号密码/Google 授权都在手机上完成，
 // 彻底绕开电视屏幕键盘打不出大写符号、WebView 被 Google 判"浏览器不安全"这两个坑。
 private const val GOOGLE_LOGIN_URL = "https://hanime1.me/auth/google"
-private const val EMAIL_LOGIN_URL = "https://hanime1.me/login"
 
 private enum class LoginTab(val label: String) {
     Scan("扫码登录"),
@@ -178,7 +177,7 @@ fun LoginScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                         },
                     )
 
-                    LoginTab.Google -> GoogleLoginTab(vm)
+                    LoginTab.Google -> GoogleLoginTab(vm, onUseScan = { tab = LoginTab.Scan })
                 }
             }
         }
@@ -717,14 +716,18 @@ private fun CookieImportTab(
 // ------------------------------------------------------------------ Google 登录（TV 内置 WebView）
 
 @Composable
-private fun GoogleLoginTab(vm: AppViewModel) {
+private fun GoogleLoginTab(vm: AppViewModel, onUseScan: () -> Unit) {
     val context = LocalContext.current
 
     var pageUrl by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember { mutableStateOf(false) }
     var detected by remember { mutableStateOf(false) }
+    // Google/站点返回的 HTTP 状态，用来解释"404/403"到底是哪一步
+    var httpProblem by remember { mutableStateOf<String?>(null) }
 
-    // WebView 只在 Google 登录 Tab 内创建，离开该 Tab 时销毁，避免内存泄漏
+    // WebView 只在 Google 登录 Tab 内创建，离开该 Tab 时销毁，避免内存泄漏。
+    // 注意：不要自动加载 /auth/google —— Google 会拒绝 WebView，直接打开只会让
+    // 用户看到错误页；这里等用户明确点击后再加载，并显示真实 HTTP 状态。
     val webView = remember {
         WebView(context).apply {
             setBackgroundColor(android.graphics.Color.parseColor("#171726"))
@@ -747,8 +750,29 @@ private fun GoogleLoginTab(vm: AppViewModel) {
                     // 回到 hanime1.me 且不是登录页，说明 Cookie 里已经有会话了
                     if (isHanimeHost(url)) detected = isLoggedInHanimeUrl(url)
                 }
+
+                override fun onReceivedHttpError(
+                    view: WebView?,
+                    request: android.webkit.WebResourceRequest?,
+                    errorResponse: android.webkit.WebResourceResponse?,
+                ) {
+                    val code = errorResponse?.statusCode ?: return
+                    if (code >= 400) {
+                        val failed = request?.url?.toString().orEmpty()
+                        httpProblem = "HTTP $code：$failed"
+                    }
+                }
+
+                override fun onReceivedError(
+                    view: WebView?,
+                    request: android.webkit.WebResourceRequest?,
+                    error: android.webkit.WebResourceError?,
+                ) {
+                    if (request?.isForMainFrame == true) {
+                        httpProblem = "加载失败：${error?.description ?: "未知错误"}"
+                    }
+                }
             }
-            loadUrl(GOOGLE_LOGIN_URL)
         }
     }
 
@@ -763,25 +787,31 @@ private fun GoogleLoginTab(vm: AppViewModel) {
 
     Column(Modifier.fillMaxSize()) {
         Text(
-            "⚠ 电视 WebView 可能被 Google 拒绝，推荐用“扫码登录”在手机上完成 Google 登录。",
+            "电视 WebView 的 Google 授权大概率会被 Google 拒绝（提示“浏览器不安全”或错误页）。推荐用手机完成 Google 登录：手机浏览器授权后，用扫码登录页的“一键同步书签”把登录态送回电视。",
             color = Palette.AccentSoft,
             fontSize = 11.sp,
             lineHeight = 16.sp,
-            maxLines = 2,
+            maxLines = 3,
         )
         Spacer(Modifier.height(6.dp))
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             val status = when {
                 loading -> "正在加载 Google 登录页…"
+                httpProblem != null -> httpProblem.orEmpty()
                 detected -> "检测到已登录，请点击“我已完成登录”"
+                pageUrl.isBlank() -> "尚未加载任何页面"
                 else -> "在网页中完成 Google 授权，然后点“我已完成登录”"
             }
             Text(
                 text = status,
-                color = if (!loading && detected) Palette.Success else Palette.TextSecondary,
+                color = when {
+                    httpProblem != null -> Palette.Danger
+                    !loading && detected -> Palette.Success
+                    else -> Palette.TextSecondary
+                },
                 fontSize = 11.sp,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
@@ -821,9 +851,18 @@ private fun GoogleLoginTab(vm: AppViewModel) {
             TvButton(
                 text = "进入登录页",
                 onClick = {
+                    httpProblem = null
                     webView.loadUrl(GOOGLE_LOGIN_URL)
                     // 让 WebView 拿到真实焦点，遥控器/键盘才能操作网页
                     runCatching { webView.requestFocus() }
+                },
+                primary = true,
+            )
+            TvButton(
+                text = "用手机扫码登录",
+                onClick = {
+                    onUseScan()
+                    vm.showToast("用手机扫码完成 Google 登录后，点扫码页的“一键同步书签”")
                 },
                 primary = true,
             )
@@ -833,16 +872,15 @@ private fun GoogleLoginTab(vm: AppViewModel) {
                 primary = detected,
             )
             TvButton(text = "刷新", onClick = { webView.reload() })
-            TvButton(text = "打开邮箱登录页", onClick = { webView.loadUrl(EMAIL_LOGIN_URL) })
         }
 
         Spacer(Modifier.height(6.dp))
         Text(
-            "若 Google 提示“浏览器不安全”，请改用扫码登录（手机完成 Google 授权）或 Cookie 导入。",
+            "推荐流程：用手机扫码登录 → 手机浏览器完成 Google 授权 → 在手机上打开电视扫码页 → 点“一键同步书签”复制并保存书签 → 在 hanime1.me 页面点一下该书签，电视立即登录。",
             color = Palette.TextTertiary,
             fontSize = 11.sp,
             lineHeight = 16.sp,
-            maxLines = 2,
+            maxLines = 3,
         )
     }
 }

@@ -138,11 +138,40 @@ object HtmlParser {
 
     fun parseSearch(html: String, page: Int): SearchPage {
         val body = doc(html).body()
-        val items = body.select(".video-item-container").mapNotNull { it.toCard() }
+        var items = body.select(".video-item-container").mapNotNull { it.toCard() }
+        // `?genre=` 的结果页用的是另一套网格卡片（div.search-videos），
+        // 没有 .video-item-container / .video-link，必须走下面的回退解析。
+        if (items.isEmpty()) {
+            items = body.select("div.search-videos").mapNotNull { it.toSearchGridCard() }
+        }
         return SearchPage(
             items = items.distinctBy { it.code },
             page = page,
             hasNext = hasNextPage(body, page),
+        )
+    }
+
+    /**
+     * 分类页（`?genre=`）的卡片结构：
+     * `<a href="/watch?v=123"><div class="home-rows-videos-div search-videos">
+     *    <div class="video-card-inner"><img src=".../image/cover/123.jpg">
+     *    <div class="home-rows-videos-title">标题</div></div></div></a>`
+     * 没有时长/评分/作者信息，只有封面和标题。
+     */
+    private fun Element.toSearchGridCard(): HanimeCard? {
+        val anchor = closest("a[href]") ?: return null
+        val href = anchor.absUrl("href").ifBlank { anchor.attr("href") }
+        val code = watchCode.find(href)?.groupValues?.get(1) ?: return null
+        val img = selectFirst("img") ?: return null
+        val cover = img.absUrl("src").ifBlank { img.attr("src") }
+        if (cover.isBlank()) return null
+        val title = selectFirst(".home-rows-videos-title")?.text()?.trim()
+            ?: img.attr("alt").trim()
+        return HanimeCard(
+            code = code,
+            title = title.ifBlank { "未命名影片" },
+            cover = cover,
+            duration = selectFirst(".duration")?.text()?.trim()?.ifBlank { null },
         )
     }
 
