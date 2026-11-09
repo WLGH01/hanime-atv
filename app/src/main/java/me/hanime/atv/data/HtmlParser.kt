@@ -172,6 +172,8 @@ object HtmlParser {
             title = title.ifBlank { "未命名影片" },
             cover = cover,
             duration = selectFirst(".duration")?.text()?.trim()?.ifBlank { null },
+            // 这套网格卡片用的是 image/cover/xxx.jpg 竖版海报（268×394）
+            portrait = true,
         )
     }
 
@@ -193,6 +195,7 @@ object HtmlParser {
 
     private fun Element.toCard(): HanimeCard? {
         val link = selectFirst("a.video-link")
+            ?: selectFirst("h4.video-title a[href*=watch]")
             ?: selectFirst("a[href*=watch]")
             ?: return null
         val href = link.absUrl("href").ifBlank { link.attr("href") }
@@ -204,8 +207,16 @@ object HtmlParser {
         val stats = select(".stats-container .stat-item")
             .map { it.text().trim() }
             .filter { it.isNotBlank() }
-        val title = (selectFirst("div.title")?.text()?.trim()
-            ?: attr("title").trim())
+        // 站点的卡片标题有三种写法：
+        // - 首页/搜索：`div.title`
+        // - 相关推荐/作者列表：容器自身的 title 属性，文字最完整
+        // - 播放列表（playlist-video-card）：`h4.video-title > a`
+        // 之前只认 div.title，导致相关推荐里的播放列表卡片全变成“未命名影片”。
+        val title = attr("title").trim()
+            .ifBlank { selectFirst("div.title")?.text()?.trim().orEmpty() }
+            .ifBlank { selectFirst("h4.video-title, .video-title, .grid-title, .home-rows-videos-title")?.text()?.trim().orEmpty() }
+            .ifBlank { link.attr("title").trim() }
+            .ifBlank { img?.attr("alt").orEmpty() }
             .replace("\n", " ")
             .trim()
         val uploader = selectFirst(".subtitle a")?.text()?.trim()
@@ -277,9 +288,12 @@ object HtmlParser {
             ?.absUrl("src")?.ifBlank { null }
             ?: body.selectFirst("img#video-user-avatar")?.absUrl("src")?.ifBlank { null }
 
-        val related = (body.select("#related-tab .video-item-container").ifEmpty {
-            null
-        } ?: body.select(".video-item-container"))
+        // 相关推荐在 `#related-tabcontent` 里；注意页面没有 `#related-tab` 这个 id，
+        // 之前的选择器永远匹配不到，回退成整页的 .video-item-container 后，
+        // 先命中的是播放列表（playlist-video-card）——标题为“未命名影片”。
+        val relatedScope = body.selectFirst("#related-tabcontent")
+        val relatedElements = relatedScope?.select(".video-item-container").orEmpty()
+        val related = (if (relatedElements.isNotEmpty()) relatedElements else body.select(".video-item-container"))
             .mapNotNull { it.toCard() }
             .filter { it.code != code }
             .distinctBy { it.code }

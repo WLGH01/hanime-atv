@@ -21,6 +21,7 @@ class HtmlParserSearchTest {
         assertEquals(listOf("408317", "408321", "408319"), page.items.map { it.code })
         assertEquals("[中字後補] 與毫無自覺的青梅竹馬出於好奇試著做愛之後 3", page.items[0].title)
         assertTrue(page.items[0].cover.startsWith("https://vdownload.hembed.com/image/cover/408317.jpg"))
+        assertTrue("分类页封面是 2:3 竖版海报，卡片必须用竖图布局", page.items.all { it.portrait })
         assertTrue("广告卡（erolabs）必须被跳过", page.items.none { it.code.isBlank() })
         assertTrue("翻页链接应识别为还有下一页", page.hasNext)
     }

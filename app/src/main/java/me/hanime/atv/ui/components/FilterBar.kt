@@ -195,8 +195,12 @@ fun BrowseResults(
                     }
                 }
             } else {
+                // 分类/标签结果页是 2:3 竖版海报，首页/关键词搜索是 16:9 横版缩略图。
+                // 同一页里以多数为准，避免混排时格子忽高忽低。
+                val portraitGrid = page.items.count { it.portrait } * 2 > page.items.size
+                val cardWidth = if (portraitGrid) 168.dp else 196.dp
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(196.dp),
+                    columns = GridCells.Adaptive(cardWidth),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     contentPadding = PaddingValues(bottom = 36.dp),
@@ -207,7 +211,8 @@ fun BrowseResults(
                             VideoCard(
                                 card = card,
                                 onClick = { onOpen(card.code) },
-                                width = 196.dp,
+                                width = cardWidth,
+                                portrait = card.portrait,
                             )
                         }
                     }

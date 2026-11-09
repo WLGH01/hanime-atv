@@ -113,21 +113,47 @@ object ApkInstaller {
         android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O ||
             context.packageManager.canRequestPackageInstalls()
 
+    /**
+     * 打开"安装未知应用"授权页。
+     * 部分 ROM 没有 ACTION_MANAGE_UNKNOWN_APP_SOURCES 的对应页面，失败时退到应用列表/系统设置。
+     */
     fun openInstallPermissionSettings(context: Context) {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
-        runCatching {
+        val opened = runCatching {
             val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
                 .setData(android.net.Uri.parse("package:${context.packageName}"))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
+        }.isSuccess
+        if (opened) return
+        val fallback = runCatching {
+            context.startActivity(
+                Intent(android.provider.Settings.ACTION_APPLICATION_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.isSuccess
+        if (fallback) return
+        runCatching {
+            context.startActivity(
+                Intent(android.provider.Settings.ACTION_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
         }
     }
 
+    /**
+     * 拉起系统安装器。返回 true 表示成功启动了安装界面。
+     * 注意：FileProvider 的 content:// URI 必须同时带 FLAG_GRANT_READ_URI_PERMISSION 和 clipData，
+     * 否则部分 ROM（小米/华为/Vivo 等）的包安装器读不到文件，表现为"无法跳出安装界面"。
+     */
     fun install(context: Context, apk: File): Boolean = runCatching {
+        if (!apk.exists() || apk.length() <= 0L) return@runCatching false
         val uri = FileProvider.getUriForFile(context, fileProviderAuthority(context), apk)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            // 部分 ROM 只认 clipData 里的 URI 授权，setData 单独设置不够
+            clipData = android.content.ClipData.newRawUri("", uri)
         }
         context.startActivity(intent)
         true

@@ -10,14 +10,18 @@ import java.net.URLDecoder
 /**
  * 电视端局域网配对服务：电视显示二维码，手机扫码后打开这个服务提供的页面。
  *
- * 为什么要有它：电视遥控器/屏幕键盘输入长密码几乎不可用，Google 在 WebView 里
- * 还会以"浏览器不安全"为由拒绝授权。把登录搬到手机浏览器/手机键盘上完成，
- * 电视只负责收结果，是最稳的方案。
+ * 为什么要有它：电视遥控器/屏幕键盘输入长密码几乎不可用。把账号密码登录搬到
+ * 手机键盘上完成，电视只负责收结果，是最稳的方案。
  *
  * 页面能力：
  * - 手机输入账号密码 → 电视用站点表单登录（Cookie 落在电视的 CookieJar）
- * - 手机浏览器打开 Google 授权页（手机浏览器不会被拒）
+ * - Google 登录引导：说明改在电视「Google (TV)」Tab 里完成（WebView 才能拿到 HttpOnly 会话）
+ * - Google-only 账号：先在手机上给账号设一个密码，再回本页用邮箱密码登录
  * - 高级：把电脑上登录后的 Cookie 粘贴回电视
+ *
+ * 注意：站点会话 Cookie `hanime1_session` 带 HttpOnly，网页 JS 的 document.cookie
+ * 读不到，所以不要再提供"书签把 Cookie 带回电视"这类方案（且浏览器保存书签时会
+ * 去掉 javascript: 前缀，点开只会变成访问站点上不存在的路径，返回 404）。
  */
 class PhoneLoginServer(
     private val repository: HanimeRepository,
@@ -65,7 +69,6 @@ class PhoneLoginServer(
 
                 session.method == Method.POST && uri == "/api/login" -> handleLogin(session)
                 session.method == Method.POST && uri == "/api/cookie" -> handleCookie(session)
-                session.method == Method.GET && uri == "/c" -> handleBrowserSync(session)
                 session.method == Method.GET && uri == "/api/ping" -> json("""{"ok":true}""")
                 else -> newFixedLengthResponse(
                     Response.Status.NOT_FOUND,
@@ -125,65 +128,6 @@ class PhoneLoginServer(
                 json("""{"ok":false,"message":${quote(result.message)}}""")
             }
         }
-    }
-
-    /**
-     * 浏览器书签回传：手机/电脑在 hanime1.me 登录（包括 Google 登录）后，
-     * 一键同步书签会把 document.cookie 带到这个地址，电视用它完成登录。
-     * 站点的 hanime1_session / XSRF-TOKEN 不是 HttpOnly，因此可以这样迁移。
-     */
-    private fun handleBrowserSync(session: IHTTPSession): Response {
-        val params: Map<String, String> = session.parms
-        if (!tokenMatches(params["t"])) return forbidden()
-        val cookie = params["d"].orEmpty()
-        if (cookie.isBlank()) {
-            return simplePage(
-                title = "同步失败",
-                message = "没有收到登录 Cookie。请确认是在已登录 hanime1.me 的页面点击同步书签。",
-                ok = false,
-            )
-        }
-        pushStatus("正在校验浏览器登录态…")
-        val result = runBlocking { repository.loginWithCookieString(cookie) }
-        return when (result) {
-            is LoginResult.Success -> {
-                completeLogin(result.user)
-                simplePage(
-                    title = "已同步到电视",
-                    message = "登录成功：${result.user.name}。可以关闭这个页面，回到电视操作了。",
-                    ok = true,
-                )
-            }
-
-            is LoginResult.Failure -> {
-                pushStatus("同步失败：${result.message}")
-                simplePage("同步失败", result.message, ok = false)
-            }
-        }
-    }
-
-    private fun simplePage(title: String, message: String, ok: Boolean): Response {
-        val color = if (ok) "#4ade80" else "#ff8f8f"
-        val icon = if (ok) "✅" else "⚠️"
-        val html = """
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>$title</title>
-<style>
-body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0b0b13;color:#f5f5fa;font:16px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;padding:24px}
-.box{max-width:420px;text-align:center}
-.icon{font-size:54px}
-h1{font-size:20px;color:$color;margin:12px 0 8px}
-p{color:#a8a8bc;font-size:14px;margin:0}
-</style>
-</head>
-<body><div class="box"><div class="icon">$icon</div><h1>$title</h1><p>$message</p></div></body>
-</html>
-""".trimIndent()
-        return newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", html)
     }
 
     private fun completeLogin(user: UserInfo) {
@@ -333,7 +277,6 @@ button.ghost{background:var(--hi);color:var(--text);font-weight:600;border:1px s
 .hr{height:1px;background:rgba(255,255,255,.07);margin:18px 0}
 details summary{cursor:pointer;color:var(--dim);font-size:14px;outline:none}
 .badge{display:inline-block;font-size:12px;color:var(--dim);background:rgba(255,255,255,.06);border-radius:999px;padding:3px 10px;margin-left:6px}
-a.google{display:block;text-align:center;text-decoration:none;background:#fff;color:#1f1f1f;border-radius:12px;padding:14px;font-weight:700;margin-top:12px}
 .done{display:none;text-align:center;padding:26px 10px}
 .done .big{font-size:46px}
 </style>
@@ -359,16 +302,21 @@ a.google{display:block;text-align:center;text-decoration:none;background:#fff;co
       </form>
       <div class="msg" id="msg"></div>
       <div class="hr"></div>
-      <div style="font-weight:700">用 Google 登录</div>
-      <div class="tip">1. 点下面的按钮，在手机浏览器里完成 Google 授权（手机浏览器不会被 Google 拒绝）。<br>2. 登录成功、停在 hanime1.me 任意页面后，点下面「一键同步书签」，登录态就会送回电视。</div>
-      <a class="google" href="https://hanime1.me/auth/google" target="_blank" rel="noopener">在手机浏览器中打开 Google 登录</a>
-      <details style="margin-top:14px">
-        <summary>一键同步书签（Google 登录后点一下即可）</summary>
-        <div class="tip">把下面这段保存成浏览器书签（书签网址填这段完整代码），在 hanime1.me 的页面点一下该书签即可同步。电脑浏览器同样适用。</div>
-        <textarea id="bm" rows="5" readonly></textarea>
-        <button class="ghost" id="bmBtn" type="button">复制书签代码</button>
-        <div class="msg" id="bmMsg"></div>
-      </details>
+      <div style="font-weight:700">Google 登录怎么走（重要）</div>
+      <div class="tip">
+        <b>推荐：在电视上完成 Google 登录</b><br>
+        回到电视，切到「Google (TV)」标签页 → 点“进入登录页” → 在电视的网页里用 Google 登录。电视的 WebView 能读取站点的 HttpOnly 登录 Cookie，登录成功后 App 会自动导入并返回，手机上不需要再做任何操作。
+      </div>
+      <div class="tip">
+        <b>账号只能用 Google 登录？</b><br>
+        1. 用手机浏览器打开 <a href="https://hanime1.me/login" target="_blank" rel="noopener" style="color:#ff8fb0">hanime1.me/login</a>，先用 Google 登录一次（完成账号建立 / 确认账号可用）。<br>
+        2. 在站点点「忘記密碼」，用该账号的邮箱重置一次密码。<br>
+        3. 回到本页，用上面的「邮箱 + 新密码」登录，电视会自动同步登录态。
+      </div>
+      <div class="tip">
+        <b>已经在电脑上登录过？</b><br>
+        展开下面的「高级：手动粘贴 Cookie」，把电脑浏览器的 Cookie 粘贴进来即可同步到电视；也可以在电视的「Cookie 导入」Tab 里粘贴。
+      </div>
     </div>
 
     <div class="card">
@@ -440,22 +388,8 @@ byId("loginForm").addEventListener("submit", async (ev) => {
   }
 });
 
-// 一键同步书签：在 hanime1.me 页面执行，把 document.cookie 带回电视
-const bookmarklet = "javascript:(function(){location.href='" + location.origin +
-  "/c?t=" + encodeURIComponent(TOKEN) + "&d='+encodeURIComponent(document.cookie);})()";
-byId("bm").value = bookmarklet;
-byId("bmBtn").addEventListener("click", async () => {
-  const box = byId("bm");
-  box.focus();
-  box.select();
-  let ok = false;
-  try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
-  if (!ok && navigator.clipboard) {
-    try { await navigator.clipboard.writeText(bookmarklet); ok = true; } catch (e) { ok = false; }
-  }
-  showMsg(byId("bmMsg"), ok ? "已复制，去浏览器书签里粘贴保存" : "请长按上面文字全选复制", ok);
-});
-
+// 一键同步书签：已移除。站点会话 Cookie 是 HttpOnly，document.cookie 读不到；
+// 浏览器保存书签时还会去掉 javascript: 前缀，点开只会打开站点的 404 路径。
 byId("cookieBtn").addEventListener("click", async () => {
   const btn = byId("cookieBtn");
   btn.disabled = true;

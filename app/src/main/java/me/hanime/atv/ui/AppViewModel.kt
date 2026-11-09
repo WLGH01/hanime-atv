@@ -623,6 +623,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var showUpdateDialog by mutableStateOf(false)
         private set
 
+    /** 弹窗里展示的一行引导/错误文案（安装包丢失、需要授权、安装器拉起失败等） */
+    var installHint by mutableStateOf<String?>(null)
+        private set
+
+    /** 当前是否已获得"安装未知应用"权限，用于弹窗/设置页展示 */
+    var canInstallPackages by mutableStateOf(ApkInstaller.canRequestInstall(application))
+        private set
+
+    /** 用户被引导去系统设置授权时暂存待安装包，返回 App 后自动继续安装 */
+    private var pendingInstallFile by mutableStateOf<File?>(null)
+
     fun maybeAutoCheckUpdate() {
         val last = store.lastUpdateCheck
         if (System.currentTimeMillis() - last < 6 * 60 * 60 * 1000L) return
@@ -650,6 +661,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissUpdateDialog() {
         showUpdateDialog = false
+        installHint = null
     }
 
     fun skipUpdate() {
@@ -677,6 +689,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val target = File(app.cacheDir.resolve("updates"), apkFileName(info))
+        installHint = null
+        pendingInstallFile = null
         viewModelScope.launch {
             updateState = UpdateState.Downloading(info, 0f, 0L)
             var lastPercent = -1
@@ -691,8 +705,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             result.onSuccess { file ->
+                // 下载完成后只停在 Ready，等用户按"立即安装"，不要自动拉起安装器
                 updateState = UpdateState.Ready(info, file)
-                installUpdate(file)
+                showUpdateDialog = true
+                installHint = null
+                canInstallPackages = ApkInstaller.canRequestInstall(app)
+                showToast("下载完成，按「立即安装」继续")
             }.onFailure {
                 updateState = UpdateState.Failed(it.toUserMessage())
                 showToast("下载失败：${it.toUserMessage()}")
@@ -700,22 +718,59 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 已有下载好的 APK 时直接拉起系统安装器 */
+    /**
+     * 拉起系统安装器。
+     * - 安装包不存在：提示并保留弹窗；
+     * - 没有"安装未知应用"权限：记录待安装包、跳系统设置、保持弹窗，返回后由 onAppResume 自动继续；
+     * - 安装器启动失败：保持弹窗并给出提示（引导去设置）。
+     */
     fun installUpdate(file: File? = null) {
         val apk = file ?: (updateState as? UpdateState.Ready)?.file
-        if (apk == null || !apk.exists()) {
+        if (apk == null || !apk.exists() || apk.length() <= 0L) {
+            installHint = "安装包不存在或已损坏，请重新下载"
+            // 回到 Available，让弹窗重新出现“立即更新”，否则 Ready 状态只能反复点“立即安装”
+            (updateState as? UpdateState.Ready)?.let { updateState = UpdateState.Available(it.info) }
             showToast("安装包不存在，请重新下载")
+            showUpdateDialog = true
             return
         }
-        if (!ApkInstaller.canRequestInstall(app)) {
-            showToast("请先允许 Hanime ATV 安装应用，然后返回重试")
+        canInstallPackages = ApkInstaller.canRequestInstall(app)
+        if (!canInstallPackages) {
+            pendingInstallFile = apk
+            installHint = "已打开「允许安装应用」设置，允许后返回会自动继续"
+            showUpdateDialog = true
+            showToast("请在系统设置中允许 Hanime ATV 安装应用")
             ApkInstaller.openInstallPermissionSettings(app)
             return
         }
-        showUpdateDialog = false
-        if (!ApkInstaller.install(app, apk)) {
-            showToast("无法启动系统安装器，请到设置→应用→允许安装未知来源后重试")
+        if (ApkInstaller.install(app, apk)) {
+            pendingInstallFile = null
+            installHint = null
+            showUpdateDialog = false
+        } else {
+            installHint = "无法启动系统安装器，请先允许「安装未知应用」再重试"
+            showUpdateDialog = true
+            showToast("无法启动系统安装器，请检查安装权限")
         }
+    }
+
+    /** 打开"安装未知应用"授权页（弹窗里的兜底入口） */
+    fun openInstallPermissionSettings() {
+        (updateState as? UpdateState.Ready)?.file?.let { pendingInstallFile = it }
+        installHint = "已打开「允许安装应用」设置，允许后返回会自动继续"
+        showUpdateDialog = true
+        ApkInstaller.openInstallPermissionSettings(app)
+        canInstallPackages = ApkInstaller.canRequestInstall(app)
+    }
+
+    /** 从系统设置返回时调用：拿到了安装权限就自动继续之前的安装 */
+    fun onAppResume() {
+        val granted = ApkInstaller.canRequestInstall(app)
+        canInstallPackages = granted
+        val pending = pendingInstallFile ?: return
+        if (!granted) return
+        pendingInstallFile = null
+        installUpdate(pending)
     }
 
     // ------------------------------------------------------------ 提示

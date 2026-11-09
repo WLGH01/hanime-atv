@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>影片 | hanime1.me</title></head>
+<body>
+<video id="player" poster="https://vdownload.hembed.com/image/cover/409101.jpg?secure=a,1">
+    <source src="https://vdownload.hembed.com/video/409101.mp4?secure=b,2" type="video/mp4" size="1080">
+</video>
+<h3 id="shareBtn-title">本体影片标题</h3>
+
+<!-- 播放列表：站点会先输出这一段，卡片没有 title 属性、标题在 h4.video-title 里 -->
+<div id="playlist-scroll">
+    <div class="playlist-hover-wrap clickable-row videos-scroll" data-href="https://hanime1.me/watch?v=409101">
+        <div class="playlist-video-card video-item-container no-select">
+            <div class="video-thumb-container horizontal-card">
+                <div class="thumb-container">
+                    <a href="https://hanime1.me/watch?v=409101">
+                        <img class="main-thumb" src="https://vdownload.hembed.com/image/thumbnail/409101l.jpg?secure=c,3">
+                        <div class="duration">03:48</div>
+                    </a>
+                </div>
+            </div>
+            <div class="video-info-container">
+                <h4 class="video-title"><a href="https://hanime1.me/watch?v=409101">播放列表里的第一集</a></h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="related-tabcontent">
+    <div class="desktop-video-grid">
+        <!-- 广告卡：没有 /watch 链接，必须跳过 -->
+        <div class="desktop-grid-item">
+            <div title="广告" class="pure-grid-card">
+                <div class="grid-thumb-container">
+                    <a href="https://www.tip-top.one/" target="_blank">
+                        <img src="https://vdownload.hembed.com/image/icon/ad.jpg?secure=d,4">
+                    </a>
+                </div>
+                <div class="grid-title">广告</div>
+            </div>
+        </div>
+
+        <!-- 相关推荐：标题在容器 title 属性上 -->
+        <div class="desktop-grid-item">
+            <div title="相关推荐的完整标题 A" class="video-item-container">
+                <div class="horizontal-card">
+                    <a href="https://hanime1.me/watch?v=409031" class="video-link">
+                        <div class="thumb-container">
+                            <img class="main-thumb" src="https://vdownload.hembed.com/image/thumbnail/409031l.jpg?secure=e,5">
+                            <div class="duration">03:32</div>
+                        </div>
+                        <div class="title">截断的 A</div>
+                    </a>
+                    <div class="subtitle"><a href="https://hanime1.me/user/1">作者 A</a></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 相关推荐：只有 h4.video-title，没有 title 属性 -->
+        <div class="desktop-grid-item">
+            <div class="video-item-container">
+                <div class="horizontal-card">
+                    <a href="https://hanime1.me/watch?v=409032" class="video-link">
+                        <div class="thumb-container">
+                            <img class="main-thumb" src="https://vdownload.hembed.com/image/thumbnail/409032l.jpg?secure=f,6">
+                            <div class="duration">03:12</div>
+                        </div>
+                    </a>
+                    <h4 class="video-title"><a href="https://hanime1.me/watch?v=409032">相关推荐标题 B</a></h4>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

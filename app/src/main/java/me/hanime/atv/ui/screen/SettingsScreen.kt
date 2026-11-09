@@ -175,9 +175,22 @@ fun SettingsScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
                     is UpdateState.Ready -> {
                         Spacer(Modifier.height(10.dp))
-                        Text("安装包已下载完成", color = Palette.Success, fontSize = 12.sp)
+                        Text(
+                            if (vm.canInstallPackages) {
+                                "下载完成，点击「立即安装」继续"
+                            } else {
+                                "下载完成，但还没有「安装未知应用」权限"
+                            },
+                            color = if (vm.canInstallPackages) Palette.Success else Palette.Danger,
+                            fontSize = 12.sp,
+                        )
                         Spacer(Modifier.height(8.dp))
-                        TvButton("立即安装", { vm.installUpdate(state.file) }, primary = true)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            TvButton("立即安装", { vm.installUpdate(state.file) }, primary = true)
+                            if (!vm.canInstallPackages) {
+                                TvButton("打开安装权限设置", { vm.openInstallPermissionSettings() })
+                            }
+                        }
                     }
 
                     is UpdateState.Failed -> {
@@ -186,6 +199,11 @@ fun SettingsScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                     }
 
                     else -> Unit
+                }
+                val hint = vm.installHint
+                if (!hint.isNullOrBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(hint, color = Palette.TextSecondary, fontSize = 11.sp, lineHeight = 17.sp)
                 }
             }
         }

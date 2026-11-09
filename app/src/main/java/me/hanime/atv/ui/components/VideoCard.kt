@@ -37,6 +37,8 @@ fun VideoCard(
     width: Dp = 200.dp,
     progress: Float? = null,
     progressText: String? = null,
+    /** 默认跟随卡片来源：分类/标签页的竖版海报用 2:3，其余用 16:9 */
+    portrait: Boolean = card.portrait,
 ) {
     TvFocusable(
         onClick = onClick,
@@ -48,7 +50,7 @@ fun VideoCard(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
+                    .aspectRatio(if (portrait) 2f / 3f else 16f / 9f)
                     .clip(RoundedCornerShape(14.dp))
                     .background(Palette.Surface),
             ) {

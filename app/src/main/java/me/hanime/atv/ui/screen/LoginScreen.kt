@@ -6,6 +6,8 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.WebChromeClient
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
@@ -424,7 +426,7 @@ private fun ScanLoginTab(vm: AppViewModel, actionFocus: FocusRequester) {
             Text("操作步骤", color = Palette.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(6.dp))
             StepLine("1", "用手机相机或微信扫描左侧二维码")
-            StepLine("2", "在手机上输入账号密码，或点“Google 登录”")
+            StepLine("2", "在手机上输入站点账号密码（Google 账号请按页内说明）")
             StepLine("3", "电视自动同步登录状态，无需在电视上打字")
             Spacer(Modifier.height(4.dp))
 
@@ -721,7 +723,10 @@ private fun GoogleLoginTab(vm: AppViewModel, onUseScan: () -> Unit) {
 
     var pageUrl by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    // 已停在 hanime1.me 的非登录页，说明站点会话 Cookie 已经写进 WebView
     var detected by remember { mutableStateOf(false) }
+    // 自动导入只触发一次；导入结束后由 vm.loginBusy 复位，允许下次页面加载重试
+    var importing by remember { mutableStateOf(false) }
     // Google/站点返回的 HTTP 状态，用来解释"404/403"到底是哪一步
     var httpProblem by remember { mutableStateOf<String?>(null) }
 
@@ -732,23 +737,54 @@ private fun GoogleLoginTab(vm: AppViewModel, onUseScan: () -> Unit) {
         WebView(context).apply {
             setBackgroundColor(android.graphics.Color.parseColor("#171726"))
             settings.javaScriptEnabled = true
+            // Google 的授权流程依赖 localStorage/sessionStorage、数据库和弹窗式 JS
             settings.domStorageEnabled = true
+            settings.databaseEnabled = true
+            settings.javaScriptCanOpenWindowsAutomatically = true
+            // 站点资源混用 http/https 时不拦截，否则登录后跳转可能白屏
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             // 必须是桌面 Chrome UA，否则 Google 会以 disallow_useragent 拒绝授权
             settings.userAgentString = HanimeClient.USER_AGENT
             isFocusable = true
             isFocusableInTouchMode = true
-            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+            val cookieManager = CookieManager.getInstance()
+            cookieManager.setAcceptCookie(true)
+            cookieManager.setAcceptThirdPartyCookies(this, true)
+            // Google 的登录页会用到 JS 对话框/多窗口，没有 WebChromeClient 会卡死在空白页
+            webChromeClient = WebChromeClient()
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     pageUrl = url.orEmpty()
                     loading = true
+                    httpProblem = null
+                    // 又回到登录页/授权页，说明用户开始了新一轮登录，允许再次自动导入
+                    if (!isLoggedInHanimeUrl(url)) {
+                        detected = false
+                        importing = false
+                    }
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     pageUrl = url.orEmpty()
                     loading = false
-                    // 回到 hanime1.me 且不是登录页，说明 Cookie 里已经有会话了
-                    if (isHanimeHost(url)) detected = isLoggedInHanimeUrl(url)
+                    // 只有"hanime1.me 且不是 /login、/auth"才算登录成功
+                    if (!isHanimeHost(url) || !isLoggedInHanimeUrl(url)) {
+                        detected = false
+                        return
+                    }
+                    detected = true
+                    // 只自动导入一次；vm.loginBusy 覆盖用户在别处同时触发的导入
+                    if (importing || vm.loginBusy) return
+                    importing = true
+                    // 先把 CookieManager 落盘，再让 OkHttp 侧读取，否则可能读到旧值
+                    runCatching { CookieManager.getInstance().flush() }
+                    view?.postDelayed({
+                        if (vm.loginBusy) {
+                            importing = false
+                        } else {
+                            vm.onWebViewLoginFinished(close = true)
+                        }
+                    }, 300)
                 }
 
                 override fun onReceivedHttpError(
@@ -756,10 +792,11 @@ private fun GoogleLoginTab(vm: AppViewModel, onUseScan: () -> Unit) {
                     request: android.webkit.WebResourceRequest?,
                     errorResponse: android.webkit.WebResourceResponse?,
                 ) {
+                    // 只看主文档，避免 favicon/统计脚本的 4xx 干扰状态显示
+                    if (request?.isForMainFrame != true) return
                     val code = errorResponse?.statusCode ?: return
                     if (code >= 400) {
-                        val failed = request?.url?.toString().orEmpty()
-                        httpProblem = "HTTP $code：$failed"
+                        httpProblem = "HTTP $code：${request?.url}"
                     }
                 }
 
@@ -776,6 +813,11 @@ private fun GoogleLoginTab(vm: AppViewModel, onUseScan: () -> Unit) {
         }
     }
 
+    // 导入结束（无论成功还是失败）后允许重试；成功时页面会被 VM 关闭
+    LaunchedEffect(vm.loginBusy, vm.isLoggedIn) {
+        if (!vm.loginBusy && importing) importing = false
+    }
+
     DisposableEffect(webView) {
         onDispose {
             (webView.parent as? ViewGroup)?.removeView(webView)
@@ -787,7 +829,7 @@ private fun GoogleLoginTab(vm: AppViewModel, onUseScan: () -> Unit) {
 
     Column(Modifier.fillMaxSize()) {
         Text(
-            "电视 WebView 的 Google 授权大概率会被 Google 拒绝（提示“浏览器不安全”或错误页）。推荐用手机完成 Google 登录：手机浏览器授权后，用扫码登录页的“一键同步书签”把登录态送回电视。",
+            "在电视的 WebView 里完成 Google 授权：本页用桌面 Chrome UA 打开站点登录页，回到 hanime1.me 首页后会自动读取 Cookie 并同步回 App。若 Google 提示“浏览器不安全”，请改用手机扫码（账号密码）或 Cookie 导入。",
             color = Palette.AccentSoft,
             fontSize = 11.sp,
             lineHeight = 16.sp,
@@ -796,18 +838,23 @@ private fun GoogleLoginTab(vm: AppViewModel, onUseScan: () -> Unit) {
         Spacer(Modifier.height(6.dp))
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            val googleRejected = looksLikeGoogleRejection(pageUrl, httpProblem)
             val status = when {
-                loading -> "正在加载 Google 登录页…"
+                importing -> "正在导入登录态…"
+                loading -> "正在加载…"
+                googleRejected -> "Google 不允许在 WebView 中授权，请改用手机扫码或 Cookie 导入"
                 httpProblem != null -> httpProblem.orEmpty()
-                detected -> "检测到已登录，请点击“我已完成登录”"
+                vm.isLoggedIn -> "已登录"
+                detected -> "检测到登录态，正在导入…（若没有反应请点“我已完成登录”）"
                 pageUrl.isBlank() -> "尚未加载任何页面"
-                else -> "在网页中完成 Google 授权，然后点“我已完成登录”"
+                else -> "在网页中完成 Google 授权；回到站点后会自动导入"
             }
             Text(
                 text = status,
                 color = when {
-                    httpProblem != null -> Palette.Danger
-                    !loading && detected -> Palette.Success
+                    googleRejected || httpProblem != null -> Palette.Danger
+                    importing -> Palette.Accent
+                    detected || vm.isLoggedIn -> Palette.Success
                     else -> Palette.TextSecondary
                 },
                 fontSize = 11.sp,
@@ -852,6 +899,8 @@ private fun GoogleLoginTab(vm: AppViewModel, onUseScan: () -> Unit) {
                 text = "进入登录页",
                 onClick = {
                     httpProblem = null
+                    detected = false
+                    importing = false
                     webView.loadUrl(GOOGLE_LOGIN_URL)
                     // 让 WebView 拿到真实焦点，遥控器/键盘才能操作网页
                     runCatching { webView.requestFocus() }
@@ -862,21 +911,38 @@ private fun GoogleLoginTab(vm: AppViewModel, onUseScan: () -> Unit) {
                 text = "用手机扫码登录",
                 onClick = {
                     onUseScan()
-                    vm.showToast("用手机扫码完成 Google 登录后，点扫码页的“一键同步书签”")
+                    vm.showToast("用手机扫码后输入站点账号密码；Google 授权请在本页完成")
                 },
                 primary = true,
             )
             TvButton(
-                text = if (vm.loginBusy) "同步中…" else "我已完成登录",
-                onClick = { if (!vm.loginBusy) vm.onWebViewLoginFinished(close = true) },
-                primary = detected,
+                text = when {
+                    vm.loginBusy -> "同步中…"
+                    importing -> "正在导入…"
+                    else -> "我已完成登录"
+                },
+                onClick = {
+                    if (!vm.loginBusy) {
+                        importing = true
+                        // 手动兜底也要先把 WebView 的 Cookie 落盘再导入
+                        runCatching { CookieManager.getInstance().flush() }
+                        vm.onWebViewLoginFinished(close = true)
+                    }
+                },
+                primary = detected || vm.isLoggedIn,
             )
-            TvButton(text = "刷新", onClick = { webView.reload() })
+            TvButton(
+                text = "刷新",
+                onClick = {
+                    httpProblem = null
+                    if (pageUrl.isNotBlank()) webView.reload()
+                },
+            )
         }
 
         Spacer(Modifier.height(6.dp))
         Text(
-            "推荐流程：用手机扫码登录 → 手机浏览器完成 Google 授权 → 在手机上打开电视扫码页 → 点“一键同步书签”复制并保存书签 → 在 hanime1.me 页面点一下该书签，电视立即登录。",
+            "推荐流程：本页点“进入登录页”→ 完成 Google 授权 → 回到 hanime1.me 首页即自动导入并关闭登录页。若 Google 拒绝 WebView（403/错误页），请用「扫码登录」输入账号密码，或用「Cookie 导入」。",
             color = Palette.TextTertiary,
             fontSize = 11.sp,
             lineHeight = 16.sp,
@@ -1052,6 +1118,23 @@ private fun isLoggedInHanimeUrl(url: String?): Boolean {
 
 private fun hostOf(url: String): String =
     runCatching { Uri.parse(url).host }.getOrNull() ?: url
+
+/**
+ * 是否属于"Google 拒绝在 WebView 里授权"：
+ * - 主文档 403 且停在非 hanime1.me 的页面（Cloudflare 的 403 会停在站点自身域）；
+ * - 被重定向到 accounts.google.com 的错误/拒绝页（含 disallowed_useragent）。
+ */
+private fun looksLikeGoogleRejection(url: String?, problem: String?): Boolean {
+    val lowerUrl = url.orEmpty().lowercase()
+    val lowerProblem = problem.orEmpty().lowercase()
+    if (lowerUrl.contains("disallowed_useragent")) return true
+    if (lowerUrl.contains("accounts.google.com") &&
+        (lowerUrl.contains("error") || lowerUrl.contains("denied"))
+    ) {
+        return true
+    }
+    return lowerProblem.contains("403") && !lowerUrl.contains("hanime1.me")
+}
 
 /** 允许用户直接粘贴整行请求头（Cookie: a=b; c=d），去掉前缀后再交给仓库解析 */
 private fun normalizeCookieInput(raw: String): String {

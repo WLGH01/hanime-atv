@@ -10,6 +10,13 @@ data class HanimeCard(
     val uploader: String? = null,
     val timeAgo: String? = null,
     val rating: String? = null,
+    /**
+     * 封面是竖图（2:3 海报）。
+     * 站点的类型/标签结果页（`div.search-videos`）用的是 `image/cover/xxx.jpg`
+     * 竖版海报，首页和搜索页则是 `image/thumbnail/xxxl.jpg` 横版缩略图；
+     * 用同一套 16:9 卡片会把竖图截得只剩中间一条，所以单独标记。
+     */
+    val portrait: Boolean = false,
 )
 
 data class HomeRow(
